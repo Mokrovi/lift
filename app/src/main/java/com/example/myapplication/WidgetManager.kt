@@ -10,7 +10,7 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
     private val _widgets = MutableStateFlow(initialWidgets)
     val widgets: StateFlow<List<WidgetData>> = _widgets.asStateFlow()
 
-    fun addWidget(type: WidgetType, mediaUri: Uri? = null): Boolean {
+    fun addWidget(type: WidgetType, mediaUri: Uri? = null, data: String? = null): Boolean { // Added data parameter
         val currentWidgets = _widgets.value
         var newX = 16f
         var newY = 16f
@@ -31,7 +31,8 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
                 y = newY.toInt(),
                 width = widgetWidth.toInt(),
                 height = widgetHeight.toInt(),
-                mediaUri = mediaUri 
+                mediaUri = mediaUri,
+                data = data // Pass data along
             )
             
             // Assuming checkCollisionInternal can conceptually work with Float bounds
@@ -64,7 +65,8 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
             y = newY.toInt(),
             width = widgetWidth.toInt(),
             height = widgetHeight.toInt(),
-            mediaUri = mediaUri
+            mediaUri = mediaUri,
+            data = data // Store data in the new widget
         )
         _widgets.value = currentWidgets + newWidget
         return true

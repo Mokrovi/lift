@@ -1,7 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
-
 package com.example.myapplication
-
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -17,16 +14,48 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Divider
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -49,6 +78,7 @@ class MainActivity : ComponentActivity() {
     private var hasLocationPermission by mutableStateOf(false)
 
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,12 +102,23 @@ class MainActivity : ComponentActivity() {
                 var currentDialogWidgetType by remember { mutableStateOf<WidgetType?>(null) }
                 var locationString by remember { mutableStateOf("Location: Unknown") }
 
-                var canvasBackground by rememberSaveable { mutableStateOf<Uri?>(null) }
+                var canvasImageBackground by rememberSaveable { mutableStateOf<Uri?>(null) }
+
+                // Custom Saver for Color
+                val ColorSaver = Saver<Color, Int>(
+                    save = { it.toArgb() },
+                    restore = { Color(it) }
+                )
+                var canvasBackgroundColor by rememberSaveable(stateSaver = ColorSaver) { mutableStateOf(Color.LightGray) }
+
+                var showTextInputDialog by remember { mutableStateOf(false) }
+                var currentTextValue by remember { mutableStateOf("") }
+
 
                 val imagePickerLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocument(),
                     onResult = { uri: Uri? ->
-                        uri?.let { canvasBackground = it }
+                        uri?.let { canvasImageBackground = it }
                     }
                 )
 
@@ -113,6 +154,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
+                @SuppressLint("MissingPermission") // <--- ДОБАВЛЕНА АННОТАЦИЯ
                 LaunchedEffect(hasLocationPermission) {
                     if (hasLocationPermission) {
                         try {
@@ -150,10 +192,19 @@ class MainActivity : ComponentActivity() {
                                 Text("Выбрать изображение фона")
                             }
                             Button(
-                                onClick = { canvasBackground = null },
+                                onClick = { canvasImageBackground = null },
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
                             ) {
                                 Text("Сбросить фон")
+                            }
+                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+                            Text("Цвет фона", modifier = Modifier.padding(16.dp))
+                            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                ColorButton(color = Color.LightGray) { canvasBackgroundColor = Color.LightGray }
+                                ColorButton(color = Color.White) { canvasBackgroundColor = Color.White }
+                                ColorButton(color = Color.Black) { canvasBackgroundColor = Color.Black }
+                                ColorButton(color = Color.Blue) { canvasBackgroundColor = Color.Blue }
+                                ColorButton(color = Color.Green) { canvasBackgroundColor = Color.Green }
                             }
                         }
                     },
@@ -199,8 +250,9 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(paddingValues) // Apply padding from Scaffold
-                                .background(Color.LightGray)
+                                .background(if (canvasImageBackground != null) Color.Transparent else canvasBackgroundColor) // Apply selected background color or image
                         ) {
+                            // TODO: Add CoilImage if canvasImageBackground is not null
                             WidgetCanvas(
                                 widgetManager = widgetManager,
                                 isEditMode = isEditMode,
@@ -240,13 +292,42 @@ class MainActivity : ComponentActivity() {
                                                 adMediaPickerLauncher.launch(arrayOf("image/*", "video/*"))
                                                 currentDialogWidgetType = null
                                             }
+                                            AddWidgetRow(WidgetType.TEXT, "Текст") {
+                                                currentDialogWidgetType = null // Close the add widget dialog
+                                                showTextInputDialog = true // Open the text input dialog
+                                            }
                                         }
                                     },
-                                    confirmButton = {},
-                                    dismissButton = {
-                                        Button(onClick = { currentDialogWidgetType = null }) {
+                                    confirmButton = {
+                                        TextButton(onClick = { currentDialogWidgetType = null }) {
                                             Text("Отмена")
                                         }
+                                    }
+                                )
+                            }
+
+                            if (showTextInputDialog) {
+                                AlertDialog(
+                                    onDismissRequest = { showTextInputDialog = false },
+                                    title = { Text("Введите текст виджета") },
+                                    text = {
+                                        TextField(
+                                            value = currentTextValue,
+                                            onValueChange = { currentTextValue = it },
+                                            label = { Text("Текст") }
+                                        )
+                                    },
+                                    confirmButton = {
+                                        Button(onClick = {
+                                            if (!widgetManager.addWidget(WidgetType.TEXT, data = currentTextValue)) {
+                                                Toast.makeText(this@MainActivity, "Could not place Text widget: No free space.", Toast.LENGTH_SHORT).show()
+                                            }
+                                            currentTextValue = "" // Reset text field
+                                            showTextInputDialog = false
+                                        }) { Text("OK") }
+                                    },
+                                    dismissButton = {
+                                        Button(onClick = { showTextInputDialog = false }) { Text("Отмена") }
                                     }
                                 )
                             }
@@ -257,23 +338,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onStop() {
-        super.onStop()
-        if (::widgetRepository.isInitialized) {
-            widgetRepository.saveWidgets(widgetManager.widgets.value)
-        }
-    }
 
     @Composable
-    fun AddWidgetRow(type: WidgetType, text: String, onClickAction: () -> Unit) {
+    fun AddWidgetRow(type: WidgetType, text: String, onClick: () -> Unit) {
         Button(
-            onClick = onClickAction,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
         ) {
             Text(text)
         }
     }
-    // Removed checkAndRequestLocationPermissions as per previous fix request
+
+    @Composable
+    fun ColorButton(color: Color, onClick: () -> Unit) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier
+                .padding(4.dp)
+                .size(40.dp)
+                .background(color, CircleShape)
+        ) {
+            // Optionally, add an icon or text here if needed
+        }
+    }
 }

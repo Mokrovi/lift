@@ -1,27 +1,35 @@
 package com.example.myapplication.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image // <-- Добавлен импорт Coil
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable // <-- ДОБАВЛЕН ИМПОРТ ДЛЯ ПАЛИТРЫ
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape // <-- ДОБАВЛЕН ИМПОРТ ДЛЯ ПАЛИТРЫ
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+// import androidx.compose.material.icons.filled.Palette // <-- НОВЫЙ ИМПОРТ - ЭТУ СТРОКУ УДАЛЯЕМ (оставляем комментарий как есть)
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow // <-- ДОБАВЛЕН ИМПОРТ ДЛЯ ПАЛИТРЫ
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb // <-- ДОБАВЛЕН ИМПОРТ ДЛЯ ПРЕОБРАЗОВАНИЯ ЦВЕТА
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale // <-- Добавлен импорт Coil
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
+import coil.compose.rememberAsyncImagePainter // <-- Добавлен импорт Coil
 import com.example.myapplication.WidgetData
 import com.example.myapplication.WidgetType
 import kotlinx.coroutines.delay
@@ -30,9 +38,6 @@ import java.util.*
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-// Вспомогательная функция для безопасного преобразования Float в Dp,
-// гарантируя, что значение не NaN и не отрицательное.
-// Минимальный размер можно установить, чтобы избежать нулевых или слишком маленьких виджетов.
 fun Float.toSafeDp(minSize: Dp = 1.dp): Dp {
     return if (this.isNaN() || this <= 0f) {
         minSize
@@ -61,13 +66,19 @@ fun WidgetDisplayItem(
     var resizeStartSize by remember { mutableStateOf(Pair(0.dp, 0.dp)) }
 
     val density = LocalDensity.current
-
     var isColliding by remember { mutableStateOf(false) }
 
+    // Список цветов для палитры (обернут в remember)
+    val colorPalette = remember {
+        listOf(
+            Color.White, Color(0xFFF0F0F0), Color.LightGray, Color.Gray, Color.DarkGray, Color.Black,
+            Color(0xFFFFCDD2), Color(0xFFC8E6C9), Color(0xFFBBDEFB), // Пастельные
+            Color(0xFFFFF9C4), Color(0xFFB2EBF2), Color(0xFFE1BEE7)
+        )
+    }
 
     LaunchedEffect(widgetData) {
         currentPosition = IntOffset(widgetData.x, widgetData.y)
-        // Обновляем с проверкой
         currentWidth = widgetData.width.toFloat().toSafeDp(minSize = 48.dp)
         currentHeight = widgetData.height.toFloat().toSafeDp(minSize = 48.dp)
     }
@@ -80,12 +91,10 @@ fun WidgetDisplayItem(
             title = { Text("Удалить виджет?") },
             text = { Text("Вы уверены, что хотите удалить этот виджет?") },
             confirmButton = {
-                Button(
-                    onClick = {
-                        onDeleteRequest(widgetData)
-                        showDeleteDialog = false
-                    }
-                ) { Text("Да") }
+                Button(onClick = {
+                    onDeleteRequest(widgetData)
+                    showDeleteDialog = false
+                }) { Text("Да") }
             },
             dismissButton = {
                 Button(onClick = { showDeleteDialog = false }) { Text("Нет") }
@@ -93,40 +102,30 @@ fun WidgetDisplayItem(
         )
     }
 
-
     Box(
         modifier = Modifier
-            .offset { currentPosition }
+            .offset(fun Density.(): IntOffset { return currentPosition })
             .size(currentWidth, currentHeight)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(widgetData.cornerRadius.dp))
             .pointerInput(isEditMode, widgetData) {
                 if (isEditMode) {
                     detectDragGestures(
-                        onDragStart = { offset: Offset ->
-                            dragStartOffset = Offset(currentPosition.x.toFloat(), currentPosition.y.toFloat())
-                        },
+                        onDragStart = { offset -> dragStartOffset = Offset(currentPosition.x.toFloat(), currentPosition.y.toFloat()) },
                         onDragEnd = {
                             isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), currentWidth.value, currentHeight.value, true)
                             if (isColliding) {
                                 currentPosition = IntOffset(dragStartOffset.x.roundToInt(), dragStartOffset.y.roundToInt())
                             } else {
-                                val updatedWidget = widgetData.copy(
-                                    x = currentPosition.x,
-                                    y = currentPosition.y
-                                )
-                                onUpdate(updatedWidget)
+                                onUpdate(widgetData.copy(x = currentPosition.x, y = currentPosition.y))
                             }
-                            isColliding = false // Reset after drag
+                            isColliding = false
                         },
-                        onDrag = { change: PointerInputChange, dragAmount: Offset ->
+                        onDrag = { change, dragAmount ->
                             change.consume()
                             val newX = currentPosition.x + dragAmount.x
                             val newY = currentPosition.y + dragAmount.y
                             isColliding = checkCollision(widgetData, newX, newY, currentWidth.value, currentHeight.value, true)
-                            currentPosition = IntOffset(
-                                newX.roundToInt(),
-                                newY.roundToInt()
-                            )
+                            currentPosition = IntOffset(newX.roundToInt(), newY.roundToInt())
                         }
                     )
                 }
@@ -134,23 +133,20 @@ fun WidgetDisplayItem(
     ) {
         Card(
             modifier = Modifier.fillMaxSize(),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(widgetData.cornerRadius.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (widgetData.type == WidgetType.CAMERA) Color.Gray else MaterialTheme.colorScheme.surfaceVariant
+                containerColor = widgetData.backgroundColor?.let { Color(it) } // Используем цвет из WidgetData
+                    ?: if (widgetData.type == WidgetType.CAMERA && widgetData.mediaUri == null) Color.Gray
+                    else MaterialTheme.colorScheme.surfaceVariant
             ),
             border = if (isColliding) BorderStroke(2.dp, Color.Red) else null
         ) {
             Box(modifier = Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.Center) {
                 when (widgetData.type) {
-                    WidgetType.WEATHER -> {
-                        Text(
-                            text = widgetData.data ?: "Location data pending...",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
+                    WidgetType.WEATHER -> Text(widgetData.data ?: "Location data pending...", style = MaterialTheme.typography.bodyLarge)
                     WidgetType.CLOCK -> {
                         var currentTime by remember { mutableStateOf("") }
-                        LaunchedEffect(Unit) { // Keyed on Unit, runs once and keeps running
+                        LaunchedEffect(Unit) {
                             val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
                             while (true) {
                                 currentTime = sdf.format(System.currentTimeMillis())
@@ -160,66 +156,83 @@ fun WidgetDisplayItem(
                         Text(currentTime, style = MaterialTheme.typography.bodyLarge)
                     }
                     WidgetType.CAMERA -> {
-                        Text("Нет сигнала", style = MaterialTheme.typography.bodyLarge)
+                        widgetData.mediaUri?.let {
+                            Image(painter = rememberAsyncImagePainter(model = it), contentDescription = "Camera feed", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        } ?: Text("Нет сигнала", style = MaterialTheme.typography.bodyLarge)
                     }
                     WidgetType.AD -> {
-                        Text("Advertisement Area", style = MaterialTheme.typography.bodyLarge)
+                        widgetData.mediaUri?.let {
+                            Image(painter = rememberAsyncImagePainter(model = it), contentDescription = "Advertisement background", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        } ?: Text("Advertisement Area", style = MaterialTheme.typography.bodyLarge)
+                    }
+                    WidgetType.TEXT -> {
+                        Text(widgetData.data ?: "Text widget", style = MaterialTheme.typography.bodyLarge)
                     }
                 }
 
                 if (isEditMode) {
+                    // Кнопка удаления
                     IconButton(
                         onClick = { showDeleteDialog = true },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .size(36.dp)
-                            .padding(4.dp)
+                        modifier = Modifier.align(Alignment.TopEnd).size(36.dp).padding(4.dp)
                     ) {
                         Icon(Icons.Filled.Delete, contentDescription = "Удалить")
                     }
 
+                    // ПАЛИТРА ЦВЕТОВ (всегда видна в режиме редактирования)
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 30.dp) // Отступ от ручки ресайза
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        colorPalette.forEach { colorItem ->
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .shadow(2.dp, CircleShape)
+                                    .background(colorItem, CircleShape)
+                                    .clip(CircleShape)
+                                    .clickable {
+                                        val updatedWidget = widgetData.copy(backgroundColor = colorItem.toArgb())
+                                        onUpdate(updatedWidget)
+                                    }
+                            )
+                        }
+                    }
+
+                    // Ручка для изменения размера
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .size(24.dp) // Ручка для изменения размера
-                            .background(Color.Transparent) // Сделаем ее прозрачной, чтобы не перекрывать содержимое
-                            .pointerInput(isEditMode, widgetData) { // Передаем widgetData, чтобы onUpdate имел доступ к последней версии
+                            .size(24.dp)
+                            .background(Color.Transparent)
+                            .pointerInput(isEditMode, widgetData) {
                                 if (isEditMode) {
                                     detectDragGestures(
-                                        onDragStart = { offset: Offset ->
-                                            resizeStartSize = Pair(currentWidth, currentHeight)
-                                        },
+                                        onDragStart = { resizeStartSize = Pair(currentWidth, currentHeight) },
                                         onDragEnd = {
-                                            // Гарантируем, что итоговые размеры корректны перед обновлением
-                                            val finalWidth = max(currentWidth.value, 48f) // Используем .value для Dp
-                                            val finalHeight = max(currentHeight.value, 48f)
-
+                                            val finalWidth = kotlin.math.max(currentWidth.value, 48f)
+                                            val finalHeight = kotlin.math.max(currentHeight.value, 48f)
                                             isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), finalWidth, finalHeight, true)
-
                                             if (isColliding) {
                                                 currentWidth = resizeStartSize.first
                                                 currentHeight = resizeStartSize.second
                                             } else {
-                                                val updatedWidget = widgetData.copy(
-                                                    width = finalWidth.roundToInt(),
-                                                    height = finalHeight.roundToInt()
-                                                )
-                                                onUpdate(updatedWidget)
+                                                onUpdate(widgetData.copy(width = finalWidth.roundToInt(), height = finalHeight.roundToInt()))
                                             }
-                                            isColliding = false // Reset after drag
+                                            isColliding = false
                                         },
-                                        onDrag = { change: PointerInputChange, dragAmount: Offset ->
+                                        onDrag = { change, dragAmount ->
                                             change.consume()
-                                            // Применяем изменения к текущим размерам
                                             val newWidthDp = currentWidth + with(density) { dragAmount.x.toDp() }
                                             val newHeightDp = currentHeight + with(density) { dragAmount.y.toDp() }
-
-                                            // Устанавливаем минимальные размеры прямо здесь
-                                            currentWidth = max(newWidthDp, 48.dp)
-                                            currentHeight = max(newHeightDp, 48.dp)
-
-                                            val tempWidth = max(currentWidth.value, 48f)
-                                            val tempHeight = max(currentHeight.value, 48f)
+                                            currentWidth = androidx.compose.ui.unit.max(newWidthDp, 48.dp)
+                                            currentHeight = androidx.compose.ui.unit.max(newHeightDp, 48.dp)
+                                            val tempWidth = kotlin.math.max(currentWidth.value, 48f)
+                                            val tempHeight = kotlin.math.max(currentHeight.value, 48f)
                                             isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), tempWidth, tempHeight, true)
                                         }
                                     )

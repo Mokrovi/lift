@@ -8,7 +8,8 @@ enum class WidgetType {
     CAMERA,
     AD,
     TEXT,
-    GIF // <-- Новый тип виджета
+    GIF,
+    VIDEO // <-- НОВЫЙ ТИП ВИДЖЕТА ДЛЯ ВИДЕО
 }
 
 data class WidgetData(

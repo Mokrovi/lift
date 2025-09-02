@@ -34,6 +34,7 @@ import coil.compose.rememberAsyncImagePainter // <-- Добавлен импор
 import coil.request.ImageRequest // <-- Добавлен импорт для ImageRequest
 import coil.size.Precision // <-- Добавлен импорт для ImageRequest
 import com.example.myapplication.GifImage // <-- ДОБАВЛЕН ИМПОРТ ДЛЯ GIF
+import com.example.myapplication.VideoPlayer // <-- НОВЫЙ ИМПОРТ ДЛЯ ВИДЕО
 import com.example.myapplication.WidgetData
 import com.example.myapplication.WidgetType
 import kotlinx.coroutines.delay
@@ -140,7 +141,7 @@ fun WidgetDisplayItem(
             shape = RoundedCornerShape(widgetData.cornerRadius.dp),
             colors = CardDefaults.cardColors(
                 containerColor = widgetData.backgroundColor?.let { Color(it) } // Используем цвет из WidgetData
-                    ?: if ((widgetData.type == WidgetType.CAMERA || widgetData.type == WidgetType.GIF) && widgetData.mediaUri == null) Color.Gray // Обновлено условие для GIF
+                    ?: if ((widgetData.type == WidgetType.CAMERA || widgetData.type == WidgetType.GIF || widgetData.type == WidgetType.VIDEO) && widgetData.mediaUri == null) Color.Gray // Обновлено условие для VIDEO
                     else MaterialTheme.colorScheme.surfaceVariant
             ),
             border = if (isColliding) BorderStroke(2.dp, Color.Red) else null
@@ -197,6 +198,14 @@ fun WidgetDisplayItem(
                                 modifier = Modifier.fillMaxSize()
                             )
                         } ?: Text("No GIF selected", style = MaterialTheme.typography.bodyLarge)
+                    }
+                    WidgetType.VIDEO -> { // <-- НОВЫЙ КЕЙС ДЛЯ ОТОБРАЖЕНИЯ ВИДЕО
+                        widgetData.mediaUri?.let {
+                            VideoPlayer(
+                                videoUri = it,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } ?: Text("No video selected", style = MaterialTheme.typography.bodyLarge)
                     }
                 }
 

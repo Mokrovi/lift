@@ -187,7 +187,7 @@ class MainActivity : ComponentActivity() {
                                 val lastKnownLocation = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) // Or GPS_PROVIDER
                                 if (lastKnownLocation != null) {
                                     locationString = "Lat: ${lastKnownLocation.latitude}, Lon: ${lastKnownLocation.longitude}"
-                                    // Optionally update weather widget if it exists and needs explicit update
+                                    widgetManager.updateCurrentLocation(lastKnownLocation.latitude, lastKnownLocation.longitude) // ADDED THIS CALL
                                 } else {
                                     locationString = "Location: Not available (try enabling location services)"
                                     Toast.makeText(this@MainActivity, locationString, Toast.LENGTH_LONG).show()
@@ -293,7 +293,7 @@ class MainActivity : ComponentActivity() {
                                     text = {
                                         Column {
                                             AddWidgetRow(WidgetType.WEATHER, "Погода") {
-                                                if (!widgetManager.addWidget(WidgetType.WEATHER)) {
+                                                if (!widgetManager.addWidget(WidgetType.WEATHER)) { // MODIFIED HERE - REMOVED cityName
                                                     Toast.makeText(this@MainActivity, "Could not place Weather widget: No free space.", Toast.LENGTH_SHORT).show()
                                                 }
                                                 currentDialogWidgetType = null
@@ -349,7 +349,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                     confirmButton = {
                                         Button(onClick = {
-                                            if (!widgetManager.addWidget(WidgetType.TEXT, data = currentTextValue)) {
+                                            if (!widgetManager.addWidget(WidgetType.TEXT, textData = currentTextValue)) {
                                                 Toast.makeText(this@MainActivity, "Could not place Text widget: No free space.", Toast.LENGTH_SHORT).show()
                                             }
                                             currentTextValue = "" // Reset text field

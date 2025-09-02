@@ -10,7 +10,6 @@ import androidx.compose.foundation.shape.CircleShape // <-- ДОБАВЛЕН И�
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-// import androidx.compose.material.icons.filled.Palette // <-- НОВЫЙ ИМПОРТ - ЭТУ СТРОКУ УДАЛЯЕМ (оставляем комментарий как есть)
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -72,6 +71,10 @@ fun WidgetDisplayItem(
 
     val density = LocalDensity.current
     var isColliding by remember { mutableStateOf(false) }
+
+    // Переменные для толщины рамки в пикселях
+    val normalBorderWidth = with(density) { 1f.toDp() }
+    val collidingBorderWidth = with(density) { 5f.toDp() }
 
     // Список цветов для палитры (обернут в remember)
     val colorPalette = remember {
@@ -144,11 +147,15 @@ fun WidgetDisplayItem(
                     ?: if ((widgetData.type == WidgetType.CAMERA || widgetData.type == WidgetType.GIF || widgetData.type == WidgetType.VIDEO) && widgetData.mediaUri == null) Color.Gray // Обновлено условие для VIDEO
                     else MaterialTheme.colorScheme.surfaceVariant
             ),
-            border = if (isColliding) BorderStroke(2.dp, Color.Red) else null
+            border = if (isColliding) { // ИЗМЕНЕНИЕ ЗДЕСЬ
+                BorderStroke(collidingBorderWidth, Color.Red)
+            } else {
+                BorderStroke(normalBorderWidth, MaterialTheme.colorScheme.outline)
+            }
         ) {
             Box(modifier = Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.Center) {
                 when (widgetData.type) {
-                    WidgetType.WEATHER -> Text(widgetData.data ?: "Location data pending...", style = MaterialTheme.typography.bodyLarge)
+                    WidgetType.WEATHER -> WeatherWidgetCard(widget = widgetData)
                     WidgetType.CLOCK -> {
                         var currentTime by remember { mutableStateOf("") }
                         LaunchedEffect(Unit) {
@@ -168,7 +175,6 @@ fun WidgetDisplayItem(
                     WidgetType.AD -> {
                         widgetData.mediaUri?.let { uri ->
                             val context = LocalContext.current
-                            // val density = LocalDensity.current // density is already available in this scope
                             val imageWidthPx = with(density) { currentWidth.roundToPx() }
                             val imageHeightPx = with(density) { currentHeight.roundToPx() }
 
@@ -188,7 +194,7 @@ fun WidgetDisplayItem(
                         } ?: Text("Advertisement Area", style = MaterialTheme.typography.bodyLarge)
                     }
                     WidgetType.TEXT -> {
-                        Text(widgetData.data ?: "Text widget", style = MaterialTheme.typography.bodyLarge)
+                        Text(widgetData.textData ?: "Text widget", style = MaterialTheme.typography.bodyLarge)
                     }
                     WidgetType.GIF -> { // <-- НОВЫЙ КЕЙС ДЛЯ ОТОБРАЖЕНИЯ GIF
                         widgetData.mediaUri?.let {

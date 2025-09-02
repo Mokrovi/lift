@@ -9,7 +9,7 @@ enum class WidgetType {
     AD,
     TEXT,
     GIF,
-    VIDEO // <-- НОВЫЙ ТИП ВИДЖЕТА ДЛЯ ВИДЕО
+    VIDEO
 }
 
 data class WidgetData(
@@ -27,7 +27,12 @@ data class WidgetData(
     var isVertical: Boolean = false,
     var horizontalAlignment: HorizontalAlignmentMode = HorizontalAlignmentMode.LEFT, // This will now refer to the enum in HorizontalAlignmentMode.kt
     var zIndex: Int = 0,
-    var data: String? = null // For storing additional widget-specific data
+    var textData: String? = null, // Renamed from 'data' for clarity, used for TEXT widget
+    // Weather-specific data
+    var cityName: String? = null, // For WEATHER widget
+    var temperature: Double? = null, // For WEATHER widget
+    var weatherDescription: String? = null, // For WEATHER widget
+    var weatherIconUrl: String? = null // For WEATHER widget
 )
 
 // The HorizontalAlignmentMode enum has been removed from here

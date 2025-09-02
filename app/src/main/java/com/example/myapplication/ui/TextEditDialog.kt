@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.toLowerCase
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.HorizontalAlignmentMode
@@ -260,13 +261,13 @@ fun EditableTextWidget(
         if (widgetDataState.isVertical) {
             VerticalStretchedText(
                 modifier = Modifier.fillMaxSize().align(Alignment.Center), // Заполняем и центрируем
-                text = widgetDataState.data ?: "", // Используем поле 'data' и обрабатываем null
+                text = widgetDataState.textData ?: "", // <-- ИЗМЕНЕНО: Используем поле 'textData'
                 textSize = widgetDataState.textSize ?: 16,
                 color = widgetDataState.textColor?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface
             )
         } else {
             Text(
-                text = widgetDataState.data ?: "", // Используем поле 'data' и обрабатываем null
+                text = widgetDataState.textData ?: "", // <-- ИЗМЕНЕНО: Используем поле 'textData'
                 fontSize = (widgetDataState.textSize ?: 16).sp,
                 color = widgetDataState.textColor?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface,
                 textAlign = when (widgetDataState.horizontalAlignment) {
@@ -291,7 +292,7 @@ fun EditableTextWidget(
                     textSize = newTextSize,
                     isVertical = newIsVertical,
                     horizontalAlignment = newHorizontalAlignment
-                    // Обратите внимание: поле 'data' (текст) здесь не изменяется,
+                    // Обратите внимание: поле 'textData' (текст) здесь не изменяется,
                     // т.к. TextEditDialog не предоставляет такой возможности.
                     // Если нужно изменять текст, TextEditDialog также должен быть модифицирован.
                 )

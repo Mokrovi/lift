@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.max
 import coil.compose.rememberAsyncImagePainter // <-- Добавлен импорт Coil
 import coil.request.ImageRequest // <-- Добавлен импорт для ImageRequest
 import coil.size.Precision // <-- Добавлен импорт для ImageRequest
+import com.example.myapplication.GifImage // <-- ДОБАВЛЕН ИМПОРТ ДЛЯ GIF
 import com.example.myapplication.WidgetData
 import com.example.myapplication.WidgetType
 import kotlinx.coroutines.delay
@@ -139,7 +140,7 @@ fun WidgetDisplayItem(
             shape = RoundedCornerShape(widgetData.cornerRadius.dp),
             colors = CardDefaults.cardColors(
                 containerColor = widgetData.backgroundColor?.let { Color(it) } // Используем цвет из WidgetData
-                    ?: if (widgetData.type == WidgetType.CAMERA && widgetData.mediaUri == null) Color.Gray
+                    ?: if ((widgetData.type == WidgetType.CAMERA || widgetData.type == WidgetType.GIF) && widgetData.mediaUri == null) Color.Gray // Обновлено условие для GIF
                     else MaterialTheme.colorScheme.surfaceVariant
             ),
             border = if (isColliding) BorderStroke(2.dp, Color.Red) else null
@@ -187,6 +188,15 @@ fun WidgetDisplayItem(
                     }
                     WidgetType.TEXT -> {
                         Text(widgetData.data ?: "Text widget", style = MaterialTheme.typography.bodyLarge)
+                    }
+                    WidgetType.GIF -> { // <-- НОВЫЙ КЕЙС ДЛЯ ОТОБРАЖЕНИЯ GIF
+                        widgetData.mediaUri?.let {
+                            GifImage(
+                                data = it,
+                                contentDescription = "GIF image",
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } ?: Text("No GIF selected", style = MaterialTheme.typography.bodyLarge)
                     }
                 }
 

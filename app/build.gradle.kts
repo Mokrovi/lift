@@ -50,6 +50,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("io.coil-kt:coil-gif:2.6.0")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("com.google.code.gson:gson:2.10.1")
     testImplementation(libs.junit)

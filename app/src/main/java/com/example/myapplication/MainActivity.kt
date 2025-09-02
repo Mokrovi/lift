@@ -132,6 +132,17 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 )
+                 // ДОБАВЛЯЕМ НОВЫЙ ЛОНЧЕР СПЕЦИАЛЬНО ДЛЯ GIF
+                val gifMediaPickerLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument(),
+                    onResult = { uri: Uri? ->
+                        uri?.let {
+                            if (!widgetManager.addWidget(WidgetType.GIF, mediaUri = it)) {
+                                Toast.makeText(this@MainActivity, "Could not place GIF widget: No free space.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                )
 
                 val locationPermissionsLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestMultiplePermissions(),
@@ -288,13 +299,18 @@ class MainActivity : ComponentActivity() {
                                                 }
                                                 currentDialogWidgetType = null
                                             }
-                                            AddWidgetRow(WidgetType.AD, "Реклама") {
+                                            AddWidgetRow(WidgetType.AD, "Фото") {
                                                 adMediaPickerLauncher.launch(arrayOf("image/*", "video/*"))
                                                 currentDialogWidgetType = null
                                             }
                                             AddWidgetRow(WidgetType.TEXT, "Текст") {
                                                 currentDialogWidgetType = null // Close the add widget dialog
                                                 showTextInputDialog = true // Open the text input dialog
+                                            }
+                                            // НОВАЯ КНОПКА ДЛЯ GIF
+                                            AddWidgetRow(WidgetType.GIF, "GIF Анимация") {
+                                                gifMediaPickerLauncher.launch(arrayOf("image/gif"))
+                                                currentDialogWidgetType = null
                                             }
                                         }
                                     },

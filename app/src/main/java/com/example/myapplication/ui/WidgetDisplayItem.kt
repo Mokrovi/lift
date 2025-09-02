@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.toArgb // <-- ДОБАВЛЕН ИМПОРТ 
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale // <-- Добавлен импорт Coil
+import androidx.compose.ui.platform.LocalContext // <-- Добавлен импорт для ImageRequest
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -30,6 +31,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
 import coil.compose.rememberAsyncImagePainter // <-- Добавлен импорт Coil
+import coil.request.ImageRequest // <-- Добавлен импорт для ImageRequest
+import coil.size.Precision // <-- Добавлен импорт для ImageRequest
 import com.example.myapplication.WidgetData
 import com.example.myapplication.WidgetType
 import kotlinx.coroutines.delay
@@ -161,8 +164,25 @@ fun WidgetDisplayItem(
                         } ?: Text("Нет сигнала", style = MaterialTheme.typography.bodyLarge)
                     }
                     WidgetType.AD -> {
-                        widgetData.mediaUri?.let {
-                            Image(painter = rememberAsyncImagePainter(model = it), contentDescription = "Advertisement background", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        widgetData.mediaUri?.let { uri ->
+                            val context = LocalContext.current
+                            // val density = LocalDensity.current // density is already available in this scope
+                            val imageWidthPx = with(density) { currentWidth.roundToPx() }
+                            val imageHeightPx = with(density) { currentHeight.roundToPx() }
+
+                            val painter = rememberAsyncImagePainter(
+                                model = ImageRequest.Builder(context)
+                                    .data(uri)
+                                    .size(imageWidthPx, imageHeightPx) // Request image at exact size in pixels
+                                    .precision(Precision.EXACT)
+                                    .build()
+                            )
+                            Image(
+                                painter = painter,
+                                contentDescription = "Advertisement background",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit
+                            )
                         } ?: Text("Advertisement Area", style = MaterialTheme.typography.bodyLarge)
                     }
                     WidgetType.TEXT -> {
@@ -179,7 +199,7 @@ fun WidgetDisplayItem(
                         Icon(Icons.Filled.Delete, contentDescription = "Удалить")
                     }
 
-                    // ПАЛИТРА ЦВЕТОВ (всегда видна в режиме редактирования)
+
                     Row(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)

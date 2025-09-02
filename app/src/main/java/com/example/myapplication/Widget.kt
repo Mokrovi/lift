@@ -20,6 +20,10 @@ data class WidgetData(
     var cornerRadius: Int = 12, // Default to 12dp as per step 7
     var mediaUri: Uri? = null, // For AD type,
     var backgroundColor: Int? = null, // <--- НОВОЕ ПОЛЕ ДЛЯ ЦВЕТА ФОНА
+    var textColor: Int? = null,
+    var textSize: Int? = null,
+    var isVertical: Boolean = false,
+    var horizontalAlignment: HorizontalAlignmentMode = HorizontalAlignmentMode.LEFT,
     var zIndex: Int = 0,
     var data: String? = null // For storing additional widget-specific data
 )

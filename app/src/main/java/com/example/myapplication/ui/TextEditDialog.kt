@@ -1,13 +1,16 @@
 package com.example.myapplication.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -20,10 +23,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme // Added import
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch // Added import
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.Switch // Added import
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,14 +39,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.myapplication.HorizontalAlignmentMode
 import com.example.myapplication.WidgetData
-import com.example.myapplication.HorizontalAlignmentMode // Added import
 import kotlin.math.roundToInt
 
 @Composable
@@ -93,7 +97,7 @@ fun TextEditDialog(
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+
                     Text("Text Color:", fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyRow(
@@ -215,5 +219,86 @@ fun VerticalStretchedText(
                 Spacer(modifier = Modifier.weight(1f))
             }
         }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun EditableTextWidget(
+    modifier: Modifier = Modifier,
+    initialWidgetData: WidgetData,
+    onWidgetDataChange: (WidgetData) -> Unit
+) {
+    var widgetDataState by remember(initialWidgetData.id) { mutableStateOf(initialWidgetData) }
+    var showEditDialog by remember { mutableStateOf(false) }
+
+    // Update internal state if initialWidgetData changes from parent,
+    // for example, if multiple widgets share data or it's updated externally.
+    LaunchedEffect(initialWidgetData) {
+        if (initialWidgetData != widgetDataState) {
+            widgetDataState = initialWidgetData
+        }
+    }
+
+    val contentAlignment = when (widgetDataState.horizontalAlignment) {
+        HorizontalAlignmentMode.LEFT -> Alignment.CenterStart
+        HorizontalAlignmentMode.CENTER -> Alignment.Center
+        HorizontalAlignmentMode.RIGHT -> Alignment.CenterEnd
+    }
+
+    Box(
+        modifier = modifier
+            .combinedClickable(
+                onClick = { /* Одиночное нажатие, если нужно */ },
+                onDoubleClick = {
+                    showEditDialog = true
+                }
+            )
+            .background(widgetDataState.backgroundColor?.let { Color(it) } ?: Color.Transparent)
+            .padding(8.dp) // Добавим немного отступов для наглядности
+    ) {
+        if (widgetDataState.isVertical) {
+            VerticalStretchedText(
+                modifier = Modifier.fillMaxSize().align(Alignment.Center), // Заполняем и центрируем
+                text = widgetDataState.data ?: "", // Используем поле 'data' и обрабатываем null
+                textSize = widgetDataState.textSize ?: 16,
+                color = widgetDataState.textColor?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface
+            )
+        } else {
+            Text(
+                text = widgetDataState.data ?: "", // Используем поле 'data' и обрабатываем null
+                fontSize = (widgetDataState.textSize ?: 16).sp,
+                color = widgetDataState.textColor?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface,
+                textAlign = when (widgetDataState.horizontalAlignment) {
+                    HorizontalAlignmentMode.LEFT -> TextAlign.Start
+                    HorizontalAlignmentMode.CENTER -> TextAlign.Center
+                    HorizontalAlignmentMode.RIGHT -> TextAlign.End
+                },
+                modifier = Modifier.align(contentAlignment)
+            )
+        }
+    }
+
+    if (showEditDialog) {
+        TextEditDialog(
+            showDialog = true,
+            widgetData = widgetDataState,
+            onDismissRequest = { showEditDialog = false },
+            onSave = { newBackgroundColor, newTextColor, newTextSize, newIsVertical, newHorizontalAlignment ->
+                val updatedWidgetData = widgetDataState.copy(
+                    backgroundColor = newBackgroundColor,
+                    textColor = newTextColor,
+                    textSize = newTextSize,
+                    isVertical = newIsVertical,
+                    horizontalAlignment = newHorizontalAlignment
+                    // Обратите внимание: поле 'data' (текст) здесь не изменяется,
+                    // т.к. TextEditDialog не предоставляет такой возможности.
+                    // Если нужно изменять текст, TextEditDialog также должен быть модифицирован.
+                )
+                widgetDataState = updatedWidgetData
+                onWidgetDataChange(updatedWidgetData)
+                showEditDialog = false
+            }
+        )
     }
 }

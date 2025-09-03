@@ -31,11 +31,11 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
         }
     }
 
+    // Изменяем тип mediaUri на String? чтобы соответствовать RTSP URL
     fun addWidget(
         type: WidgetType,
-        mediaUri: Uri? = null,
+        mediaUri: String? = null, // Параметр функции остается String?
         textData: String? = null
-        // cityName parameter removed
     ): Boolean {
         val currentWidgets = _widgets.value
         var newX = 16f
@@ -49,6 +49,7 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
 
         while (collision && attempts < maxAttempts) {
             collision = false
+            // При создании WidgetData для проверки коллизий, конвертируем String? в Uri?
             val potentialWidgetBounds = WidgetData(
                 id = "temp_id_${UUID.randomUUID()}",
                 type = type,
@@ -56,9 +57,9 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
                 y = newY.toInt(),
                 width = widgetWidth.toInt(),
                 height = widgetHeight.toInt(),
-                mediaUri = mediaUri,
+                mediaUri = mediaUri?.let { Uri.parse(it) }, // Конвертация
                 textData = if (type == WidgetType.TEXT) textData else null,
-                cityName = null // cityName is always null initially for new weather widgets
+                cityName = null
             )
             if (checkCollisionInternal(potentialWidgetBounds, newX, newY, widgetWidth, widgetHeight, currentWidgets)) {
                 collision = true
@@ -79,6 +80,7 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
         }
 
         val newWidgetId = UUID.randomUUID().toString()
+        // При создании финального WidgetData, также конвертируем String? в Uri?
         val newWidget = WidgetData(
             id = newWidgetId,
             type = type,
@@ -86,14 +88,14 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
             y = newY.toInt(),
             width = widgetWidth.toInt(),
             height = widgetHeight.toInt(),
-            mediaUri = mediaUri,
+            mediaUri = mediaUri?.let { Uri.parse(it) }, // Конвертация
             textData = if (type == WidgetType.TEXT) textData else null,
-            cityName = null // cityName is always null initially
+            cityName = null
         )
         _widgets.value = currentWidgets + newWidget
 
         if (type == WidgetType.WEATHER) {
-            fetchWeatherData(newWidgetId) // Fetch weather data using coordinates if available
+            fetchWeatherData(newWidgetId)
         }
         return true
     }
@@ -109,8 +111,6 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
             val lon = currentLongitude
 
             if (lat != null && lon != null) {
-                // Предполагается, что в WeatherRepository будет метод getCurrentWeatherByCoordinates
-                // А в WeatherResponse (или аналогичной модели) будет поле name для города
                 val weatherInfo = weatherRepository.getCurrentWeatherByCoordinates(lat, lon)
                 if (weatherInfo != null) {
                     _widgets.value = _widgets.value.map {
@@ -121,7 +121,7 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
                                 weatherIconUrl = weatherInfo.weather.firstOrNull()?.icon?.let { iconCode ->
                                     "https://openweathermap.org/img/wn/$iconCode@2x.png"
                                 },
-                                cityName = weatherInfo.cityName // <-- ИСПРАВЛЕНО: weatherInfo.name -> weatherInfo.cityName
+                                cityName = weatherInfo.cityName
                             )
                         } else {
                             it
@@ -129,9 +129,12 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
                     }
                 }
             } else {
-                val currentWidgetCityName = widget.cityName // Create a stable local variable
-                if (currentWidgetCityName != null) { // Fallback if coordinates are not available but city name was somehow set (legacy or future)
-                    val weatherInfo = weatherRepository.getCurrentWeatherByCityName(currentWidgetCityName) // <-- Use the local variable
+                // val currentWidgetCityName = widget.cityName // This would require cityName in WidgetData to be Uri?
+                // For now, let's assume if lat/lon are null, we don't fetch by city name from widget
+                // Or, WidgetData needs a separate cityName field of type String?
+                 val currentWidgetCityName = widget.cityName // Assuming cityName is String? in WidgetData
+                if (currentWidgetCityName != null) {
+                    val weatherInfo = weatherRepository.getCurrentWeatherByCityName(currentWidgetCityName)
                     if (weatherInfo != null) {
                         _widgets.value = _widgets.value.map {
                             if (it.id == widgetId) {
@@ -141,6 +144,7 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
                                     weatherIconUrl = weatherInfo.weather.firstOrNull()?.icon?.let { iconCode ->
                                         "https://openweathermap.org/img/wn/$iconCode@2x.png"
                                     }
+                                    // cityName will remain as it was or be updated if API provides it
                                 )
                             } else {
                                 it

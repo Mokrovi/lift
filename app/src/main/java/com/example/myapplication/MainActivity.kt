@@ -65,6 +65,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.example.myapplication.data.WidgetRepository
+import com.example.myapplication.ui.discoverTrD3121Camera // Исправленный импорт
 import com.example.myapplication.ui.WidgetCanvas
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.launch
@@ -98,7 +99,7 @@ class MainActivity : ComponentActivity() {
                 var systemBarsVisible by rememberSaveable { mutableStateOf(false) }
                 var isEditMode by rememberSaveable { mutableStateOf(false) }
                 val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-                val scope = rememberCoroutineScope()
+                val scope = rememberCoroutineScope() // <--- Scope for coroutines
                 var currentDialogWidgetType by remember { mutableStateOf<WidgetType?>(null) }
                 var locationString by remember { mutableStateOf("Location: Unknown") }
 
@@ -125,7 +126,8 @@ class MainActivity : ComponentActivity() {
                     contract = ActivityResultContracts.OpenDocument(),
                     onResult = { uri: Uri? ->
                         uri?.let {
-                            if (!widgetManager.addWidget(WidgetType.AD, mediaUri = it)) {
+                            // Используем mediaUri: String? теперь
+                            if (!widgetManager.addWidget(WidgetType.AD, mediaUri = it.toString())) {
                                 Toast.makeText(this@MainActivity, "Could not place AD widget: No free space.", Toast.LENGTH_SHORT).show()
                             }
                         }
@@ -136,7 +138,8 @@ class MainActivity : ComponentActivity() {
                     contract = ActivityResultContracts.OpenDocument(),
                     onResult = { uri: Uri? ->
                         uri?.let {
-                            if (!widgetManager.addWidget(WidgetType.GIF, mediaUri = it)) {
+                             // Используем mediaUri: String? теперь
+                            if (!widgetManager.addWidget(WidgetType.GIF, mediaUri = it.toString())) {
                                 Toast.makeText(this@MainActivity, "Could not place GIF widget: No free space.", Toast.LENGTH_SHORT).show()
                             }
                         }
@@ -147,7 +150,8 @@ class MainActivity : ComponentActivity() {
                     contract = ActivityResultContracts.OpenDocument(),
                     onResult = { uri: Uri? ->
                         uri?.let {
-                            if (!widgetManager.addWidget(WidgetType.VIDEO, mediaUri = it)) {
+                            // Используем mediaUri: String? теперь
+                            if (!widgetManager.addWidget(WidgetType.VIDEO, mediaUri = it.toString())) {
                                 Toast.makeText(this@MainActivity, "Could not place Video widget: No free space.", Toast.LENGTH_SHORT).show()
                             }
                         }
@@ -247,7 +251,7 @@ class MainActivity : ComponentActivity() {
                                             checked = isEditMode,
                                             onCheckedChange = { isEditMode = it }
                                         )
-                                        IconButton(onClick = { currentDialogWidgetType = WidgetType.CLOCK /* Placeholder */ }) {
+                                        IconButton(onClick = { currentDialogWidgetType = WidgetType.CLOCK /* Placeholder to show dialog */ }) {
                                             Icon(Icons.Filled.Add, contentDescription = "Добавить виджет")
                                         }
                                     }
@@ -309,11 +313,19 @@ class MainActivity : ComponentActivity() {
                                                 }
                                                 currentDialogWidgetType = null
                                             }
+                                            // Изменяем логику для ONVIF_CAMERA
                                             AddWidgetRow(WidgetType.ONVIF_CAMERA, "ONVIF Камера") {
-                                                if (!widgetManager.addWidget(WidgetType.ONVIF_CAMERA)) {
-                                                    Toast.makeText(this@MainActivity, "Could not place ONVIF Camera widget: No free space.", Toast.LENGTH_SHORT).show()
+                                                scope.launch { // <--- Launch coroutine
+                                                    val cameraDevice = discoverTrD3121Camera(this@MainActivity) // <--- Call suspend function
+                                                    if (cameraDevice != null && !cameraDevice.rtspUrl.isNullOrEmpty()) {
+                                                        if (!widgetManager.addWidget(WidgetType.ONVIF_CAMERA, mediaUri = cameraDevice.rtspUrl)) {
+                                                            Toast.makeText(this@MainActivity, "Could not place ONVIF Camera widget: No free space.", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    } else {
+                                                        Toast.makeText(this@MainActivity, "ONVIF камера не найдена или RTSP URL отсутствует.", Toast.LENGTH_LONG).show()
+                                                    }
+                                                    currentDialogWidgetType = null // Закрываем диалог в любом случае
                                                 }
-                                                currentDialogWidgetType = null
                                             }
                                             AddWidgetRow(WidgetType.AD, "Фото") {
                                                 adMediaPickerLauncher.launch(arrayOf("image/*", "video/*"))

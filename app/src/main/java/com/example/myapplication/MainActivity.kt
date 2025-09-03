@@ -62,7 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat // Added this line
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.example.myapplication.data.WidgetRepository
 import com.example.myapplication.ui.WidgetCanvas
@@ -104,7 +104,6 @@ class MainActivity : ComponentActivity() {
 
                 var canvasImageBackground by rememberSaveable { mutableStateOf<Uri?>(null) }
 
-                // Custom Saver for Color
                 val ColorSaver = Saver<Color, Int>(
                     save = { it.toArgb() },
                     restore = { Color(it) }
@@ -132,7 +131,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 )
-                 // ДОБАВЛЯЕМ НОВЫЙ ЛОНЧЕР СПЕЦИАЛЬНО ДЛЯ GIF
+
                 val gifMediaPickerLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocument(),
                     onResult = { uri: Uri? ->
@@ -143,7 +142,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 )
-                 // НОВЫЙ ЛОНЧЕР ДЛЯ ВИДЕО
+
                 val videoMediaPickerLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocument(),
                     onResult = { uri: Uri? ->
@@ -176,7 +175,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                @SuppressLint("MissingPermission") // <--- ДОБАВЛЕНА АННОТАЦИЯ
+                @SuppressLint("MissingPermission")
                 LaunchedEffect(hasLocationPermission) {
                     if (hasLocationPermission) {
                         try {
@@ -184,10 +183,10 @@ class MainActivity : ComponentActivity() {
                             if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                                 ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
                             ) {
-                                val lastKnownLocation = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) // Or GPS_PROVIDER
+                                val lastKnownLocation = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
                                 if (lastKnownLocation != null) {
                                     locationString = "Lat: ${lastKnownLocation.latitude}, Lon: ${lastKnownLocation.longitude}"
-                                    widgetManager.updateCurrentLocation(lastKnownLocation.latitude, lastKnownLocation.longitude) // ADDED THIS CALL
+                                    widgetManager.updateCurrentLocation(lastKnownLocation.latitude, lastKnownLocation.longitude)
                                 } else {
                                     locationString = "Location: Not available (try enabling location services)"
                                     Toast.makeText(this@MainActivity, locationString, Toast.LENGTH_LONG).show()
@@ -271,8 +270,8 @@ class MainActivity : ComponentActivity() {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(paddingValues) // Apply padding from Scaffold
-                                .background(if (canvasImageBackground != null) Color.Transparent else canvasBackgroundColor) // Apply selected background color or image
+                                .padding(paddingValues)
+                                .background(if (canvasImageBackground != null) Color.Transparent else canvasBackgroundColor)
                         ) {
                             // TODO: Add CoilImage if canvasImageBackground is not null
                             WidgetCanvas(
@@ -293,7 +292,7 @@ class MainActivity : ComponentActivity() {
                                     text = {
                                         Column {
                                             AddWidgetRow(WidgetType.WEATHER, "Погода") {
-                                                if (!widgetManager.addWidget(WidgetType.WEATHER)) { // MODIFIED HERE - REMOVED cityName
+                                                if (!widgetManager.addWidget(WidgetType.WEATHER)) {
                                                     Toast.makeText(this@MainActivity, "Could not place Weather widget: No free space.", Toast.LENGTH_SHORT).show()
                                                 }
                                                 currentDialogWidgetType = null
@@ -304,19 +303,25 @@ class MainActivity : ComponentActivity() {
                                                 }
                                                 currentDialogWidgetType = null
                                             }
-                                            AddWidgetRow(WidgetType.CAMERA, "Камера") {
+                                            AddWidgetRow(WidgetType.CAMERA, "Камера") { // This might be the old camera, ensure it's distinct
                                                 if (!widgetManager.addWidget(WidgetType.CAMERA)) {
                                                     Toast.makeText(this@MainActivity, "Could not place Camera widget: No free space.", Toast.LENGTH_SHORT).show()
                                                 }
                                                 currentDialogWidgetType = null
                                             }
+                                            AddWidgetRow(WidgetType.ONVIF_CAMERA, "ONVIF Камера") {
+                                                if (!widgetManager.addWidget(WidgetType.ONVIF_CAMERA)) {
+                                                    Toast.makeText(this@MainActivity, "Could not place ONVIF Camera widget: No free space.", Toast.LENGTH_SHORT).show()
+                                                }
+                                                currentDialogWidgetType = null
+                                            }
                                             AddWidgetRow(WidgetType.AD, "Фото") {
-                                                adMediaPickerLauncher.launch(arrayOf("image/*", "video/*")) // "video/*" здесь может быть избыточным, если есть отдельная кнопка Видео
+                                                adMediaPickerLauncher.launch(arrayOf("image/*", "video/*"))
                                                 currentDialogWidgetType = null
                                             }
                                             AddWidgetRow(WidgetType.TEXT, "Текст") {
-                                                currentDialogWidgetType = null // Close the add widget dialog
-                                                showTextInputDialog = true // Open the text input dialog
+                                                currentDialogWidgetType = null
+                                                showTextInputDialog = true
                                             }
                                             AddWidgetRow(WidgetType.GIF, "GIF Анимация") {
                                                 gifMediaPickerLauncher.launch(arrayOf("image/gif"))
@@ -352,7 +357,7 @@ class MainActivity : ComponentActivity() {
                                             if (!widgetManager.addWidget(WidgetType.TEXT, textData = currentTextValue)) {
                                                 Toast.makeText(this@MainActivity, "Could not place Text widget: No free space.", Toast.LENGTH_SHORT).show()
                                             }
-                                            currentTextValue = "" // Reset text field
+                                            currentTextValue = ""
                                             showTextInputDialog = false
                                         }) { Text("OK") }
                                     },
@@ -388,7 +393,6 @@ class MainActivity : ComponentActivity() {
                 .size(40.dp)
                 .background(color, CircleShape)
         ) {
-            // Optionally, add an icon or text here if needed
         }
     }
 }

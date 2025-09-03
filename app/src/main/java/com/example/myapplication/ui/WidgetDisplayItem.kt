@@ -1,12 +1,12 @@
 package com.example.myapplication.ui
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image // <-- Добавлен импорт Coil
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable // <-- ДОБАВЛЕН ИМПОРТ ДЛЯ ПАЛИТРЫ
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape // <-- ДОБАВЛЕН ИМПОРТ ДЛЯ ПАЛИТРЫ
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -15,25 +15,25 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow // <-- ДОБАВЛЕН ИМПОРТ ДЛЯ ПАЛИТРЫ
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb // <-- ДОБАВЛЕН ИМПОРТ ДЛЯ ПРЕОБРАЗОВАНИЯ ЦВЕТА
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale // <-- Добавлен импорт Coil
-import androidx.compose.ui.platform.LocalContext // <-- Добавлен импорт для ImageRequest
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
-import coil.compose.rememberAsyncImagePainter // <-- Добавлен импорт Coil
-import coil.request.ImageRequest // <-- Добавлен импорт для ImageRequest
-import coil.size.Precision // <-- Добавлен импорт для ImageRequest
-import com.example.myapplication.GifImage // <-- ДОБАВЛЕН ИМПОРТ ДЛЯ GIF
-import com.example.myapplication.VideoPlayer // <-- НОВЫЙ ИМПОРТ ДЛЯ ВИДЕО
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import coil.size.Precision
+import com.example.myapplication.GifImage
+import com.example.myapplication.VideoPlayer
 import com.example.myapplication.WidgetData
 import com.example.myapplication.WidgetType
 import kotlinx.coroutines.delay
@@ -144,10 +144,10 @@ fun WidgetDisplayItem(
             shape = RoundedCornerShape(widgetData.cornerRadius.dp),
             colors = CardDefaults.cardColors(
                 containerColor = widgetData.backgroundColor?.let { Color(it) } // Используем цвет из WidgetData
-                    ?: if ((widgetData.type == WidgetType.CAMERA || widgetData.type == WidgetType.GIF || widgetData.type == WidgetType.VIDEO) && widgetData.mediaUri == null) Color.Gray // Обновлено условие для VIDEO
+                    ?: if ((widgetData.type == WidgetType.CAMERA || widgetData.type == WidgetType.GIF || widgetData.type == WidgetType.VIDEO || widgetData.type == WidgetType.ONVIF_CAMERA) && widgetData.mediaUri == null) Color.Gray
                     else MaterialTheme.colorScheme.surfaceVariant
             ),
-            border = if (isColliding) { // ИЗМЕНЕНИЕ ЗДЕСЬ
+            border = if (isColliding) {
                 BorderStroke(collidingBorderWidth, Color.Red)
             } else {
                 BorderStroke(normalBorderWidth, MaterialTheme.colorScheme.outline)
@@ -171,6 +171,9 @@ fun WidgetDisplayItem(
                         widgetData.mediaUri?.let {
                             Image(painter = rememberAsyncImagePainter(model = it), contentDescription = "Camera feed", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                         } ?: Text("Нет сигнала", style = MaterialTheme.typography.bodyLarge)
+                    }
+                    WidgetType.ONVIF_CAMERA -> {
+                        OnvifCameraDisplay(widgetData = widgetData, modifier = Modifier.fillMaxSize())
                     }
                     WidgetType.AD -> {
                         widgetData.mediaUri?.let { uri ->
@@ -196,7 +199,7 @@ fun WidgetDisplayItem(
                     WidgetType.TEXT -> {
                         Text(widgetData.textData ?: "Text widget", style = MaterialTheme.typography.bodyLarge)
                     }
-                    WidgetType.GIF -> { // <-- НОВЫЙ КЕЙС ДЛЯ ОТОБРАЖЕНИЯ GIF
+                    WidgetType.GIF -> {
                         widgetData.mediaUri?.let {
                             GifImage(
                                 data = it,
@@ -205,7 +208,7 @@ fun WidgetDisplayItem(
                             )
                         } ?: Text("No GIF selected", style = MaterialTheme.typography.bodyLarge)
                     }
-                    WidgetType.VIDEO -> { // <-- НОВЫЙ КЕЙС ДЛЯ ОТОБРАЖЕНИЯ ВИДЕО
+                    WidgetType.VIDEO -> {
                         widgetData.mediaUri?.let {
                             VideoPlayer(
                                 videoUri = it,

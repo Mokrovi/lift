@@ -26,7 +26,7 @@ android {
             localPropertiesFile.inputStream().use { localProperties.load(it) }
         }
         val apiKey = localProperties.getProperty("OPENWEATHER_API_KEY", "")
-        buildConfigField("String", "OPENWEATHER_API_KEY", "$apiKey")
+        buildConfigField("String", "OPENWEATHER_API_KEY", "\"$apiKey\"")
     }
 
     buildTypes {
@@ -52,7 +52,6 @@ android {
 }
 
 dependencies {
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -79,4 +78,13 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+    // ONVIF-клиент для Android
+    implementation("com.github.rvi:ONVIFCameraAndroid:1.1.9")
+
+    // OkHttp
+    implementation("com.squareup.okhttp3:okhttp:4.9.3")
+
+    // VLC player
+    implementation("org.videolan.android:libvlc-all:3.6.0")
 }

@@ -3,6 +3,7 @@ package com.example.myapplication
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent // Added Intent import
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.net.Uri
@@ -92,6 +93,8 @@ class MainActivity : ComponentActivity() {
         val loadedWidgets = widgetRepository.loadWidgets()
         widgetManager = WidgetManager(loadedWidgets)
 
+        // Start NetworkSignalService
+        startService(Intent(this, NetworkSignalService::class.java))
 
         setContent {
             MyApplicationTheme {

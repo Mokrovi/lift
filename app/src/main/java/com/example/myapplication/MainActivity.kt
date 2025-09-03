@@ -307,18 +307,11 @@ class MainActivity : ComponentActivity() {
                                                 }
                                                 currentDialogWidgetType = null
                                             }
-                                            AddWidgetRow(WidgetType.CAMERA, "Камера") { // This might be the old camera, ensure it's distinct
-                                                if (!widgetManager.addWidget(WidgetType.CAMERA)) {
-                                                    Toast.makeText(this@MainActivity, "Could not place Camera widget: No free space.", Toast.LENGTH_SHORT).show()
-                                                }
-                                                currentDialogWidgetType = null
-                                            }
-                                            // Изменяем логику для ONVIF_CAMERA
                                             AddWidgetRow(WidgetType.ONVIF_CAMERA, "ONVIF Камера") {
                                                 scope.launch { // <--- Launch coroutine
                                                     val cameraDevice = discoverTrD3121Camera(this@MainActivity) // <--- Call suspend function
-                                                    if (cameraDevice != null && !cameraDevice.rtspUrl.isNullOrEmpty()) {
-                                                        if (!widgetManager.addWidget(WidgetType.ONVIF_CAMERA, mediaUri = cameraDevice.rtspUrl)) {
+                                                    if (cameraDevice != null && !cameraDevice.streamUrl.isNullOrEmpty()) {
+                                                        if (!widgetManager.addWidget(WidgetType.ONVIF_CAMERA, mediaUri = cameraDevice.streamUrl)) {
                                                             Toast.makeText(this@MainActivity, "Could not place ONVIF Camera widget: No free space.", Toast.LENGTH_SHORT).show()
                                                         }
                                                     } else {

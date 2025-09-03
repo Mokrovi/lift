@@ -1,5 +1,6 @@
 package com.example.myapplication.ui
 
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -173,7 +174,15 @@ fun WidgetDisplayItem(
                         } ?: Text("Нет сигнала", style = MaterialTheme.typography.bodyLarge)
                     }
                     WidgetType.ONVIF_CAMERA -> {
-                        OnvifCameraDisplay(widgetData = widgetData, modifier = Modifier.fillMaxSize())
+
+                        // Формируем URL с Basic Authentication: http://username:password@ip/path
+                        val testMjpegUrl = "http://admin:admin@192.168.1.200/action/stream?subject=mjpeg"
+
+                        val testCameraData = widgetData.copy(
+                            mediaUri = Uri.parse(testMjpegUrl)
+                        )
+                        OnvifCameraDisplay(widgetData = testCameraData, modifier = Modifier.fillMaxSize())
+
                     }
                     WidgetType.AD -> {
                         widgetData.mediaUri?.let { uri ->

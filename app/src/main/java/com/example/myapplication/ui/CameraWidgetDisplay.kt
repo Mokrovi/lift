@@ -14,6 +14,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.myapplication.WidgetData
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
@@ -25,20 +27,36 @@ fun OnvifCameraDisplay(widgetData: WidgetData, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var showError by remember { mutableStateOf<String?>(null) }
 
-    val rtspUrl = widgetData.mediaUri
-    val rtspUrlString = rtspUrl?.toString()
+    val mediaUrl = widgetData.mediaUri 
+    val mediaUrlString = mediaUrl?.toString()
 
-    if (rtspUrlString.isNullOrEmpty()) { 
-        Box(modifier = modifier.fillMaxSize().background(Color.DarkGray), contentAlignment = Alignment.Center) {
-            Text("RTSP URL не указан в WidgetData", color = Color.White)
+    if (mediaUrlString.isNullOrEmpty()) { 
+        Box(modifier = modifier
+            .fillMaxSize()
+            .background(Color.DarkGray), contentAlignment = Alignment.Center) {
+            Text("Media URL не указан в WidgetData", color = Color.White)
         }
         return
     }
 
     // VLC player setup
-    val libVlc = remember {
+    val libVlc = remember(mediaUrlString) { // Ключ mediaUrlString, чтобы опции пересчитывались при смене URL
         val options = ArrayList<String>()
-        options.add("--rtsp-tcp")
+        options.add("--avcodec-hw=any")        // Пытаемся использовать аппаратное декодирование
+        options.add("--network-caching=1000")  // Увеличиваем кэш сети (в миллисекундах)
+        options.add("--live-caching=500")     // Кэширование для живых потоков (в миллисекундах)
+        
+        // Специфичные опции в зависимости от типа URL
+        if (mediaUrlString.startsWith("rtsp://")) {
+            options.add("--rtsp-tcp")          // Использовать RTSP через TCP (более надежно, чем UDP)
+            options.add("--skip-frames")       // Пропускать кадры при проблемах с буферизацией (для VBR)
+            options.add("--rtsp-frame-buffer-size=1000000") // Буфер для RTSP (размер в байтах)
+        } else if (mediaUrlString.startsWith("http")) {
+            // Опции для HTTP MJPEG потоков
+            // options.add("--mjpeg-fps=25") // Можно указать ожидаемую частоту кадров, если сервер ее не передает
+            // options.add("--sout-mjpeg-q=100") // Эта опция больше для исходящего потока, если VLC кодирует в MJPEG
+            // Для входящего MJPEG обычно достаточно стандартных опций и хорошего network-caching
+        }
         LibVLC(context, options)
     }
 
@@ -46,13 +64,16 @@ fun OnvifCameraDisplay(widgetData: WidgetData, modifier: Modifier = Modifier) {
         MediaPlayer(libVlc).apply {
             setEventListener { event ->
                 when (event.type) {
-                    MediaPlayer.Event.Opening -> Log.d("VLC_OnvifCameraDisplay", "Opening stream: $rtspUrl")
-                    MediaPlayer.Event.Playing -> Log.d("VLC_OnvifCameraDisplay", "Playing stream: $rtspUrl")
-                    MediaPlayer.Event.Paused -> Log.d("VLC_OnvifCameraDisplay", "Stream paused: $rtspUrl")
-                    MediaPlayer.Event.Stopped -> Log.d("VLC_OnvifCameraDisplay", "Stream stopped: $rtspUrl")
+                    MediaPlayer.Event.Opening -> Log.d("VLC_Player", "Opening stream: $mediaUrlString")
+                    MediaPlayer.Event.Playing -> Log.d("VLC_Player", "Playing stream: $mediaUrlString")
+                    MediaPlayer.Event.Paused -> Log.d("VLC_Player", "Stream paused: $mediaUrlString")
+                    MediaPlayer.Event.Stopped -> Log.d("VLC_Player", "Stream stopped: $mediaUrlString")
                     MediaPlayer.Event.EncounteredError -> {
-                        showError = "Ошибка воспроизведения потока"
-                        Log.e("VLC_OnvifCameraDisplay", "Error playing stream: $rtspUrl")
+                        Log.e("VLC_Player", "Error playing stream: $mediaUrlString")
+                        // Обновляем showError в основном потоке, если хотим показать ошибку в UI
+                        // kotlinx.coroutines.GlobalScope.launch(Dispatchers.Main) { // Пример, если нужно из другого потока
+                        //     showError = "Ошибка воспроизведения потока"
+                        // }
                     }
                     else -> Unit // Handle other events as needed
                 }
@@ -60,32 +81,64 @@ fun OnvifCameraDisplay(widgetData: WidgetData, modifier: Modifier = Modifier) {
         }
     }
 
+    DisposableEffect(mediaUrlString) { // Добавляем mediaUrlString, чтобы эффект перезапускался при смене URL
+        onDispose {
+            Log.d("VLC_Player", "Disposing Player for $mediaUrlString. Stopping and releasing media player.")
+            mediaPlayer.stop()
+            mediaPlayer.setEventListener(null) // Удаляем слушателя
+            mediaPlayer.release() }
+    }
+    // Освобождение libVlc, когда сам Composable уходит с экрана
     DisposableEffect(Unit) {
         onDispose {
-            Log.d("VLC_OnvifCameraDisplay", "Disposing OnvifCameraDisplay for $rtspUrl. Stopping and releasing media player.")
-            mediaPlayer.stop()
-            mediaPlayer.release()
+            Log.d("VLC_Player", "Disposing LibVLC instance.")
             libVlc.release()
         }
     }
 
-    LaunchedEffect(rtspUrl, mediaPlayer) {
-        if (rtspUrl != null && !rtspUrl.toString().isNullOrEmpty()) {
+    LaunchedEffect(mediaUrlString, mediaPlayer) { 
+        if (mediaUrlString.isNullOrEmpty()) { // Проверка была выше, но дублируем для ясности
+            withContext(Dispatchers.Main) {
+                showError = "Media URI отсутствует"
+            }
+            mediaPlayer?.stop()
+            return@LaunchedEffect
+        }
+
+        withContext(Dispatchers.IO) {
             try {
-                Log.d("VLC_OnvifCameraDisplay", "Setting media for $rtspUrl")
-                val media = Media(libVlc, rtspUrl)
-                mediaPlayer.media = media
-                media.release() // Media object can be released after being set to MediaPlayer
-                // Play will be called after views are attached in AndroidView's factory or update block
+                Log.d("VLC_Player", "Попытка установить медиа: $mediaUrlString в IO-контексте")
+                val media = Media(libVlc, Uri.parse(mediaUrlString))
+                
+                // Если это HTTP MJPEG, можно добавить специфичные медиа-опции здесь (с двоеточием)
+                if (mediaUrlString.startsWith("http")) {
+                    media.addOption(":no-audio") // MJPEG обычно без звука
+                    // media.addOption(":mjpeg-caching=500") // Индивидуальный кеш для этого медиа
+                }
+
+                mediaPlayer?.media = media 
+                media.release() 
+
+                mediaPlayer?.play() 
+                Log.d("VLC_Player", "Воспроизведение запущено для: $mediaUrlString")
+
+                withContext(Dispatchers.Main) {
+                    showError = null // Сбрасываем ошибку, если все прошло успешно
+                }
+
             } catch (e: Exception) {
-                showError = "Ошибка установки медиа: ${e.message}"
-                Log.e("VLC_OnvifCameraDisplay", "Error setting media for $rtspUrl", e)
+                Log.e("VLC_Player", "Ошибка при установке медиа или воспроизведении: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    showError = "Ошибка медиа: ${e.message}" // Отображаем ошибку в UI
+                }
             }
         }
     }
 
     if (showError != null) {
-        Box(modifier = modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+        Box(modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black), contentAlignment = Alignment.Center) {
             Text(text = showError!!, color = Color.White)
         }
     } else {
@@ -96,50 +149,31 @@ fun OnvifCameraDisplay(widgetData: WidgetData, modifier: Modifier = Modifier) {
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT
                     )
-                    Log.d("VLC_OnvifCameraDisplay", "Factory: Attaching views for $rtspUrl")
-                    mediaPlayer.attachViews(this, null, false, false)
-                    if (mediaPlayer.media != null && !mediaPlayer.isPlaying) {
-                        Log.d("VLC_OnvifCameraDisplay", "Factory: Playing media for $rtspUrl")
-                        mediaPlayer.play()
+                    Log.d("VLC_Player", "Factory: Attaching views for $mediaUrlString")
+                    if(mediaPlayer.vlcVout.areViewsAttached()){
+                        mediaPlayer.detachViews()
                     }
+                    mediaPlayer.attachViews(this, null, false, false)
+                    // Не вызываем play здесь, если LaunchedEffect уже это делает
                 }
             },
             update = { vlcVideoLayout ->
-                Log.d("VLC_OnvifCameraDisplay", "Update block for $rtspUrl. Current media: ${mediaPlayer.media?.uri}, isPlaying: ${mediaPlayer.isPlaying}")
-                // This block is crucial if the rtspUrl can change for an existing widget,
-                // or if play needs to be re-triggered.
-
-                // If media is not set or changed, set it again.
-                if (mediaPlayer.media == null || mediaPlayer.media?.uri != rtspUrl) {
-                    if (rtspUrl != null && !rtspUrl.toString().isNullOrEmpty()) {
-                        try {
-                            Log.d("VLC_OnvifCameraDisplay", "Update: Re-setting media for $rtspUrl")
-                            val newMedia = Media(libVlc, rtspUrl)
-                            mediaPlayer.media = newMedia
-                            newMedia.release()
-                             // Ensure views are attached before playing
-                            if (!mediaPlayer.vlcVout.areViewsAttached()) {
-                                Log.d("VLC_OnvifCameraDisplay", "Update: Re-attaching views for $rtspUrl")
-                                mediaPlayer.attachViews(vlcVideoLayout, null, false, false)
-                            }
-                            Log.d("VLC_OnvifCameraDisplay", "Update: Playing new media for $rtspUrl")
-                            mediaPlayer.play()
-                        } catch (e: Exception) {
-                            showError = "Ошибка обновления медиа: ${e.message}"
-                            Log.e("VLC_OnvifCameraDisplay", "Error updating media for $rtspUrl", e)
-                        }
-                    }
+                Log.d("VLC_Player", "Update block for $mediaUrlString. Current media: ${mediaPlayer.media?.uri}, isPlaying: ${mediaPlayer.isPlaying}, showError: $showError")
+                
+                // Логика обновления, если URL изменился или плеер не играет, когда должен:
+                val currentPlayingUri = mediaPlayer.media?.uri
+                if (mediaUrl != null && currentPlayingUri != mediaUrl && showError == null) {
+                    // URL изменился, нужно перезапустить с новым URL (это должен обработать LaunchedEffect)
+                    Log.d("VLC_Player", "Update: Media URL changed or player not set up. LaunchedEffect should handle this.")
+                    // Можно дополнительно вызвать mediaPlayer.stop() здесь, если это необходимо перед сменой media
                 } else if (mediaPlayer.media != null && !mediaPlayer.isPlaying && showError == null) {
-                    // If media is set but not playing, play it.
-                    Log.d("VLC_OnvifCameraDisplay", "Update: Media is set but not playing. Calling play for $rtspUrl")
+                    Log.d("VLC_Player", "Update: Media is set but not playing and no error. Calling play for $mediaUrlString")
                     mediaPlayer.play()
-                } else if (!mediaPlayer.vlcVout.areViewsAttached()) {
-                     // Ensure views are attached, if for some reason they got detached.
-                    Log.d("VLC_OnvifCameraDisplay", "Update: Views not attached. Re-attaching for $rtspUrl")
+                } 
+                // Переприсоединение view, если они отсоединены
+                if (!mediaPlayer.vlcVout.areViewsAttached()) {
+                    Log.d("VLC_Player", "Update: Views not attached. Re-attaching for $mediaUrlString")
                     mediaPlayer.attachViews(vlcVideoLayout, null, false, false)
-                    if (mediaPlayer.media != null && !mediaPlayer.isPlaying && showError == null) {
-                         mediaPlayer.play()
-                    }
                 }
             },
             modifier = modifier.fillMaxSize()

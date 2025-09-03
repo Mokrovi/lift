@@ -9,7 +9,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- Required for running a foreground service (recommended for long-running network tasks) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
 
@@ -41,6 +40,11 @@
             android:name=".CameraStreamActivity"
             android:exported="false" 
             android:label="Camera Stream"/>
+
+        <activity
+            android:name=".RemoteCameraViewActivity"
+            android:exported="false"
+            android:label="Remote Camera Stream"/>
 
         <receiver
             android:name=".BootCompletedReceiver"

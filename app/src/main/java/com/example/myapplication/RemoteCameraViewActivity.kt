@@ -10,13 +10,10 @@ import android.util.Log
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException // Added import
+import androidx.media3.common.Player // Added import
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-
-// We'll assume ACTION_CLOSE_REMOTE_CAMERA_VIEW is globally accessible,
-// often defined in a companion object of a service or a separate constants file.
-// For example, if it's in NetworkSignalService:
-// import com.example.myapplication.NetworkSignalService.ACTION_CLOSE_REMOTE_CAMERA_VIEW
 
 class RemoteCameraViewActivity : AppCompatActivity() {
 
@@ -36,7 +33,7 @@ class RemoteCameraViewActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_remote_camera_view) // Use the XML layout
+        setContentView(R.layout.activity_remote_camera_view)
         Log.d(TAG, "onCreate called.")
 
         playerView = findViewById(R.id.player_view)
@@ -48,18 +45,14 @@ class RemoteCameraViewActivity : AppCompatActivity() {
 
         if (remoteIpAddress != null) {
             Log.d(TAG, "Received IP Address: $remoteIpAddress")
-            // IMPORTANT: Adjust the port and path based on your webcam stream setup.
-            // This example uses RTSP on port 8554 and path /live/stream.
-            val streamUrl = "rtsp://$remoteIpAddress:8554/live/stream"
-            statusTextView.text = "Attempting to stream from: $streamUrl"
-            // Player initialization is handled in onResume/onStart for API level compatibility
+            val streamUrlForStatus = "rtsp://$remoteIpAddress:8554/live/stream"
+            statusTextView.text = "Attempting to stream from: $streamUrlForStatus"
         } else {
-            Log.e(TAG, "No IP Address received in Intent")
-            statusTextView.text = "Error: No IP Address received."
-            // Consider finishing the activity or showing a more prominent error
+            Log.e(TAG, "No IP Address received in Intent. Finishing activity.")
+            statusTextView.text = "Error: No IP Address received. Closing."
+            statusTextView.postDelayed({ finish() }, 3000)
         }
 
-        // Register the broadcast receiver
         val intentFilter = IntentFilter(ACTION_CLOSE_REMOTE_CAMERA_VIEW)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(closeReceiver, intentFilter, RECEIVER_NOT_EXPORTED)
@@ -76,7 +69,7 @@ class RemoteCameraViewActivity : AppCompatActivity() {
             statusTextView.text = "Error: IP Address missing for player."
             return
         }
-        // IMPORTANT: Ensure this matches your webcam's streaming URL structure
+
         val streamUrl = "rtsp://$remoteIpAddress:8554/live/stream"
         Log.d(TAG, "Initializing player for URL: $streamUrl")
 
@@ -84,12 +77,42 @@ class RemoteCameraViewActivity : AppCompatActivity() {
             player = ExoPlayer.Builder(this).build()
             playerView.player = player
 
+            // Добавьте слушатель событий игрока
+            player?.addListener(object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    Log.e(TAG, "Player error: ${error.message}", error)
+                    statusTextView.text = "Player error: ${error.message}"
+                }
+
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    when (playbackState) {
+                        Player.STATE_READY -> {
+                            Log.d(TAG, "Player ready - playback should start")
+                            // statusTextView.text = "Streaming started successfully" // Keep previous status or update carefully
+                        }
+                        Player.STATE_BUFFERING -> {
+                            Log.d(TAG, "Player buffering")
+                            // statusTextView.text = "Buffering..." // Optional: update status
+                        }
+                        Player.STATE_ENDED -> {
+                            Log.d(TAG, "Player ended")
+                            // statusTextView.text = "Stream ended." // Optional: update status
+                        }
+                        Player.STATE_IDLE -> {
+                            Log.d(TAG, "Player idle")
+                            // statusTextView.text = "Player idle." // Optional: update status
+                        }
+                    }
+                }
+            })
+
             val mediaItem = MediaItem.fromUri(streamUrl)
             player?.setMediaItem(mediaItem)
             player?.prepare()
-            player?.playWhenReady = true // Start playback automatically
-            statusTextView.text = "Streaming from: $streamUrl" // Update status
-            Log.d(TAG, "ExoPlayer initialized and stream preparation started.")
+            player?.playWhenReady = true
+            statusTextView.text = "Initializing stream from: $streamUrl" // More accurate initial status
+            Log.d(TAG, "ExoPlayer initialized, preparation started, playWhenReady set.")
+
         } catch (e: Exception) {
             Log.e(TAG, "Error initializing ExoPlayer", e)
             statusTextView.text = "Error initializing player: ${e.message}"
@@ -97,6 +120,7 @@ class RemoteCameraViewActivity : AppCompatActivity() {
     }
 
     private fun releasePlayer() {
+        player?.removeListener(playerListener) // Make sure to remove the listener
         player?.let {
             it.stop()
             it.release()
@@ -104,40 +128,64 @@ class RemoteCameraViewActivity : AppCompatActivity() {
             Log.d(TAG, "ExoPlayer released.")
         }
     }
+    // Define the listener as a property to be able to remove it
+    private val playerListener = object : Player.Listener {
+        override fun onPlayerError(error: PlaybackException) {
+            Log.e(TAG, "Player error: ${error.message}", error)
+            statusTextView.text = "Player error: ${error.message}"
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            val stateString = when (playbackState) {
+                Player.STATE_IDLE -> "Player.STATE_IDLE"
+                Player.STATE_BUFFERING -> "Player.STATE_BUFFERING"
+                Player.STATE_READY -> "Player.STATE_READY - Playback should start"
+                Player.STATE_ENDED -> "Player.STATE_ENDED"
+                else -> "UNKNOWN_STATE"
+            }
+            Log.d(TAG, "onPlaybackStateChanged: $stateString")
+            if (playbackState == Player.STATE_READY) {
+                statusTextView.text = "Streaming started successfully"
+            } else if (playbackState == Player.STATE_BUFFERING) {
+                 statusTextView.text = "Buffering..."
+            }
+        }
+    }
+
 
     override fun onStart() {
         super.onStart()
-        if (Build.VERSION.SDK_INT > 23) { // Android N (API 24) and above
-            if (player == null) { // Initialize player if not already initialized
+        if (Build.VERSION.SDK_INT > 23) {
+            if (player == null && intent.getStringExtra("REMOTE_IP_ADDRESS") != null) {
                 initializePlayer()
             }
-             playerView.onResume() // PlayerView also needs lifecycle calls for ads and overlay interaction
+            playerView.onResume() 
         }
     }
 
     override fun onResume() {
         super.onResume()
-        if (Build.VERSION.SDK_INT <= 23 || player == null) { // Android M (API 23) and below, or if player is null
-            if (player == null) {
-                 initializePlayer()
+        if (Build.VERSION.SDK_INT <= 23 || player == null) {
+            if (player == null && intent.getStringExtra("REMOTE_IP_ADDRESS") != null) {
+                initializePlayer()
             }
         }
         playerView.onResume()
-        player?.playWhenReady = true // Ensure playback resumes
+        player?.playWhenReady = true 
     }
 
     override fun onPause() {
         super.onPause()
-        player?.playWhenReady = false // Pause playback when activity is not in foreground
+        player?.playWhenReady = false 
         playerView.onPause()
-        if (Build.VERSION.SDK_INT <= 23) { // Android M (API 23) and below
+        if (Build.VERSION.SDK_INT <= 23) {
             releasePlayer()
         }
     }
 
     override fun onStop() {
         super.onStop()
-        if (Build.VERSION.SDK_INT > 23) { // Android N (API 24) and above
+        if (Build.VERSION.SDK_INT > 23) {
             releasePlayer()
         }
     }
@@ -148,7 +196,6 @@ class RemoteCameraViewActivity : AppCompatActivity() {
         NetworkSignalService.isRemoteCameraActivityRunning = false
         unregisterReceiver(closeReceiver)
         Log.d(TAG, "Close broadcast receiver unregistered.")
-        // Player should be released by onStop or onPause, but call here as a final safeguard
         releasePlayer()
     }
 }

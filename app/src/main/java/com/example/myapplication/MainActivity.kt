@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -70,6 +71,10 @@ import com.example.myapplication.ui.discoverTrD3121Camera // Исправлен�
 import com.example.myapplication.ui.WidgetCanvas
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.util.UUID
 
 class MainActivity : ComponentActivity() {
 
@@ -78,6 +83,46 @@ class MainActivity : ComponentActivity() {
     private lateinit var windowInsetsController: WindowInsetsControllerCompat
 
     private var hasLocationPermission by mutableStateOf(false)
+
+    private fun copyUriToInternalStorage(context: Context, uri: Uri, type: String): Uri? {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri)
+            val fileName = getFileName(context, uri) ?: "${UUID.randomUUID()}.${type}"
+            val file = File(context.filesDir, fileName)
+            val outputStream = FileOutputStream(file)
+            inputStream?.use { input ->
+                outputStream.use { output ->
+                    input.copyTo(output)
+                }
+            }
+            Uri.fromFile(file)
+        } catch (e: IOException) {
+            e.printStackTrace()
+            Toast.makeText(context, "Failed to copy file: ${e.message}", Toast.LENGTH_LONG).show()
+            null
+        }
+    }
+
+    @SuppressLint("Range")
+    private fun getFileName(context: Context, uri: Uri): String? {
+        var result: String? = null
+        if (uri.scheme == "content") {
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    result = it.getString(it.getColumnIndex(OpenableColumns.DISPLAY_NAME))
+                }
+            }
+        }
+        if (result == null) {
+            result = uri.path
+            val cut = result?.lastIndexOf('/')
+            if (cut != -1 && cut != null) {
+                result = result?.substring(cut + 1)
+            }
+        }
+        return result
+    }
 
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -121,7 +166,7 @@ class MainActivity : ComponentActivity() {
                 val imagePickerLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocument(),
                     onResult = { uri: Uri? ->
-                        uri?.let { canvasImageBackground = it }
+                        uri?.let { canvasImageBackground = it } // For background, direct URI might be okay, or copy too if needed
                     }
                 )
 
@@ -129,10 +174,12 @@ class MainActivity : ComponentActivity() {
                     contract = ActivityResultContracts.OpenDocument(),
                     onResult = { uri: Uri? ->
                         uri?.let {
-                            // Используем mediaUri: String? теперь
-                            if (!widgetManager.addWidget(WidgetType.AD, mediaUri = it.toString())) {
-                                Toast.makeText(this@MainActivity, "Could not place AD widget: No free space.", Toast.LENGTH_SHORT).show()
-                            }
+                            val internalUri = copyUriToInternalStorage(this@MainActivity, it, "ad")
+                            internalUri?.let {
+                                if (!widgetManager.addWidget(WidgetType.AD, mediaUri = internalUri.toString())) {
+                                    Toast.makeText(this@MainActivity, "Could not place AD widget: No free space.", Toast.LENGTH_SHORT).show()
+                                }
+                            } ?: Toast.makeText(this@MainActivity, "Failed to save AD media.", Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
@@ -141,10 +188,12 @@ class MainActivity : ComponentActivity() {
                     contract = ActivityResultContracts.OpenDocument(),
                     onResult = { uri: Uri? ->
                         uri?.let {
-                             // Используем mediaUri: String? теперь
-                            if (!widgetManager.addWidget(WidgetType.GIF, mediaUri = it.toString())) {
-                                Toast.makeText(this@MainActivity, "Could not place GIF widget: No free space.", Toast.LENGTH_SHORT).show()
-                            }
+                            val internalUri = copyUriToInternalStorage(this@MainActivity, it, "gif")
+                            internalUri?.let {
+                                if (!widgetManager.addWidget(WidgetType.GIF, mediaUri = internalUri.toString())) {
+                                    Toast.makeText(this@MainActivity, "Could not place GIF widget: No free space.", Toast.LENGTH_SHORT).show()
+                                }
+                            } ?: Toast.makeText(this@MainActivity, "Failed to save GIF media.", Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
@@ -153,10 +202,12 @@ class MainActivity : ComponentActivity() {
                     contract = ActivityResultContracts.OpenDocument(),
                     onResult = { uri: Uri? ->
                         uri?.let {
-                            // Используем mediaUri: String? теперь
-                            if (!widgetManager.addWidget(WidgetType.VIDEO, mediaUri = it.toString())) {
-                                Toast.makeText(this@MainActivity, "Could not place Video widget: No free space.", Toast.LENGTH_SHORT).show()
-                            }
+                            val internalUri = copyUriToInternalStorage(this@MainActivity, it, "video")
+                            internalUri?.let {
+                                if (!widgetManager.addWidget(WidgetType.VIDEO, mediaUri = internalUri.toString())) {
+                                    Toast.makeText(this@MainActivity, "Could not place Video widget: No free space.", Toast.LENGTH_SHORT).show()
+                                }
+                            } ?: Toast.makeText(this@MainActivity, "Failed to save Video media.", Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
@@ -233,6 +284,19 @@ class MainActivity : ComponentActivity() {
                                 ColorButton(color = Color.Black) { canvasBackgroundColor = Color.Black }
                                 ColorButton(color = Color.Blue) { canvasBackgroundColor = Color.Blue }
                                 ColorButton(color = Color.Green) { canvasBackgroundColor = Color.Green }
+                            }
+                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+                            Button(
+                                onClick = {
+                                    widgetRepository.saveWidgets(widgetManager.widgets.value)
+                                    scope.launch {
+                                        drawerState.close()
+                                    }
+                                    Toast.makeText(context, "Расположение виджетов сохранено", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                Text("Сохранить расположение виджетов")
                             }
                         }
                     },
@@ -324,7 +388,7 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             }
                                             AddWidgetRow(WidgetType.AD, "Фото") {
-                                                adMediaPickerLauncher.launch(arrayOf("image/*", "video/*"))
+                                                adMediaPickerLauncher.launch(arrayOf("image/*", "video/*")) // Types can be more specific if needed
                                                 currentDialogWidgetType = null
                                             }
                                             AddWidgetRow(WidgetType.TEXT, "Текст") {
@@ -379,6 +443,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    // onStop() remains without automatic save
+    override fun onStop() {
+        super.onStop()
     }
 
 

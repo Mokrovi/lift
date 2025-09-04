@@ -68,6 +68,7 @@ dependencies {
 
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-ui:1.3.1")
+    implementation("androidx.media3:media3-exoplayer-rtsp:1.3.1") // Added RTSP support
 
     // Retrofit
     implementation("com.squareup.retrofit2:retrofit:2.11.0")

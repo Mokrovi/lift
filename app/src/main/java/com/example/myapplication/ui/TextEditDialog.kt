@@ -43,12 +43,14 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.toLowerCase
+// import androidx.compose.ui.text.toLowerCase // Удалено
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.HorizontalAlignmentMode
 import com.example.myapplication.WidgetData
 import kotlin.math.roundToInt
+// Импорт для titlecase, если потребуется явный (обычно java.util.* доступен)
+// import java.util.Locale
 
 @Composable
 fun TextEditDialog(
@@ -64,7 +66,6 @@ fun TextEditDialog(
         var tempIsVertical by remember(widgetData.id, widgetData.isVertical) { mutableStateOf(widgetData.isVertical) }
         var tempHorizontalAlignment by remember(widgetData.id, widgetData.horizontalAlignment) { mutableStateOf(widgetData.horizontalAlignment) }
 
-        // Store ARGB Ints, not Color objects, to avoid saveable issues
         val availableColorInts = listOf(
             Color.White.toArgb(), Color.LightGray.toArgb(), Color.Gray.toArgb(), Color.DarkGray.toArgb(), Color.Black.toArgb(),
             Color.Red.toArgb(), Color.Green.toArgb(), Color.Blue.toArgb(), Color.Yellow.toArgb(), Color.Cyan.toArgb(), Color.Magenta.toArgb(), Color.Transparent.toArgb()
@@ -82,12 +83,12 @@ fun TextEditDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        items(availableColorInts) { colorArgb -> // Iterate over Ints
+                        items(availableColorInts) { colorArgb ->
                             Box(
                                 modifier = Modifier
                                     .size(30.dp)
                                     .clip(CircleShape)
-                                    .background(Color(colorArgb)) // Create Color on the fly
+                                    .background(Color(colorArgb))
                                     .border(
                                         width = 2.dp,
                                         color = if (tempBackgroundColor == colorArgb) Color.Black else Color.Transparent,
@@ -106,12 +107,12 @@ fun TextEditDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        items(availableColorInts) { colorArgb -> // Iterate over Ints
+                        items(availableColorInts) { colorArgb ->
                             Box(
                                 modifier = Modifier
                                     .size(30.dp)
                                     .clip(CircleShape)
-                                    .background(Color(colorArgb)) // Create Color on the fly
+                                    .background(Color(colorArgb))
                                     .border(
                                         width = 2.dp,
                                         color = if (tempTextColor == colorArgb) Color.Black else Color.Transparent,
@@ -149,7 +150,7 @@ fun TextEditDialog(
                                     containerColor = if (tempHorizontalAlignment == mode && !tempIsVertical) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
                                 )
                             ) {
-                                Text(mode.name.toLowerCase().capitalize())
+                                Text(mode.name.lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() })
                             }
                         }
                     }
@@ -160,7 +161,7 @@ fun TextEditDialog(
                         value = tempTextSize,
                         onValueChange = { tempTextSize = it },
                         valueRange = 8f..100f,
-                        steps = (100-8) -1 // Make sure this calculation is correct for the desired steps
+                        steps = (100-8) -1
                     )
                 }
             },
@@ -233,8 +234,6 @@ fun EditableTextWidget(
     var widgetDataState by remember(initialWidgetData.id) { mutableStateOf(initialWidgetData) }
     var showEditDialog by remember { mutableStateOf(false) }
 
-    // Update internal state if initialWidgetData changes from parent,
-    // for example, if multiple widgets share data or it's updated externally.
     LaunchedEffect(initialWidgetData) {
         if (initialWidgetData != widgetDataState) {
             widgetDataState = initialWidgetData
@@ -256,18 +255,18 @@ fun EditableTextWidget(
                 }
             )
             .background(widgetDataState.backgroundColor?.let { Color(it) } ?: Color.Transparent)
-            .padding(8.dp) // Добавим немного отступов для наглядности
+            .padding(8.dp)
     ) {
         if (widgetDataState.isVertical) {
             VerticalStretchedText(
-                modifier = Modifier.fillMaxSize().align(Alignment.Center), // Заполняем и центрируем
-                text = widgetDataState.textData ?: "", // <-- ИЗМЕНЕНО: Используем поле 'textData'
+                modifier = Modifier.fillMaxSize().align(Alignment.Center),
+                text = widgetDataState.textData ?: "",
                 textSize = widgetDataState.textSize ?: 16,
                 color = widgetDataState.textColor?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface
             )
         } else {
             Text(
-                text = widgetDataState.textData ?: "", // <-- ИЗМЕНЕНО: Используем поле 'textData'
+                text = widgetDataState.textData ?: "",
                 fontSize = (widgetDataState.textSize ?: 16).sp,
                 color = widgetDataState.textColor?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface,
                 textAlign = when (widgetDataState.horizontalAlignment) {
@@ -292,9 +291,6 @@ fun EditableTextWidget(
                     textSize = newTextSize,
                     isVertical = newIsVertical,
                     horizontalAlignment = newHorizontalAlignment
-                    // Обратите внимание: поле 'textData' (текст) здесь не изменяется,
-                    // т.к. TextEditDialog не предоставляет такой возможности.
-                    // Если нужно изменять текст, TextEditDialog также должен быть модифицирован.
                 )
                 widgetDataState = updatedWidgetData
                 onWidgetDataChange(updatedWidgetData)

@@ -26,7 +26,7 @@ android {
             localPropertiesFile.inputStream().use { localProperties.load(it) }
         }
         val apiKey = localProperties.getProperty("OPENWEATHER_API_KEY", "")
-        buildConfigField("String", "OPENWEATHER_API_KEY", "\"\"$apiKey\"") // Исправлено здесь
+        buildConfigField("String", "OPENWEATHER_API_KEY", "\"$apiKey\"")
     }
 
     buildTypes {
@@ -59,11 +59,13 @@ dependencies {
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.androidx.material3)
+    implementation(libs.androidx.material3) // Вероятно, это androidx.compose.material3:material3
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("io.coil-kt:coil-gif:2.6.0")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.google.android.material:material:1.12.0") // Это View-based Material Components, правильно для XML тем
+
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-ui:1.3.1")
 

@@ -8,7 +8,7 @@ import android.util.Log
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoHTTPD.IHTTPSession
 import fi.iki.elonen.NanoHTTPD.Response
-import fi.iki.elonen.NanoHTTPD.Response.Status // Added import for Status
+import fi.iki.elonen.NanoHTTPD.Response.Status
 import java.io.IOException
 import java.net.Inet4Address
 import java.net.NetworkInterface
@@ -17,7 +17,7 @@ import java.util.Collections
 // Action for the broadcast to close the CameraStreamActivity
 const val ACTION_CLOSE_CAMERA_STREAM = "com.example.myapplication.ACTION_CLOSE_CAMERA_STREAM"
 // Action for the broadcast to close the RemoteCameraViewActivity
-const val ACTION_CLOSE_REMOTE_CAMERA_VIEW = "com.example.myapplication.ACTION_CLOSE_REMOTE_CAMERA_VIEW" // New Action
+const val ACTION_CLOSE_REMOTE_CAMERA_VIEW = "com.example.myapplication.ACTION_CLOSE_REMOTE_CAMERA_VIEW"
 
 class NetworkSignalService : Service() {
 
@@ -25,10 +25,9 @@ class NetworkSignalService : Service() {
     private var webServer: MyWebServer? = null
     private val PORT = 8080
 
-    // State tracking for activities
     companion object {
-        var isStreamActivityRunning = false // For local CameraStreamActivity
-        var isRemoteCameraActivityRunning = false // New: For RemoteCameraViewActivity
+        var isStreamActivityRunning = false
+        var isRemoteCameraActivityRunning = false
     }
 
     override fun onCreate() {
@@ -47,11 +46,9 @@ class NetworkSignalService : Service() {
     inner class MyWebServer(port: Int) : NanoHTTPD(port) {
         override fun serve(session: IHTTPSession): Response {
             val uri = session.uri
-            Log.d(TAG, "Received request: ${'$'}{session.method} ${'$'}uri from ${'$'}{session.remoteIpAddress}")
+            Log.d(TAG, "Received request: ${session.method} $uri from ${session.remoteIpAddress}")
 
-            // CORS Preflight request
             if (Method.OPTIONS.equals(session.method)) {
-                // Use Status.OK directly after importing Status
                 val response = newFixedLengthResponse(Status.OK, MIME_PLAINTEXT, null, 0)
                 response.addHeader("Access-Control-Allow-Origin", "*")
                 response.addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE")
@@ -60,39 +57,34 @@ class NetworkSignalService : Service() {
                 return response
             }
 
-            // Handler for /trigger (toggle remote stream)
             if ("/trigger" == uri) {
-                if (Method.POST.equals(session.method)) {
-                    Log.d(TAG, "Handling POST request for /trigger from ${'$'}{session.remoteIpAddress}")
-                    return handleTriggerRemoteStream(session) // Delegated to a new function
+                return if (Method.POST.equals(session.method)) {
+                    Log.d(TAG, "Handling POST request for /trigger from ${session.remoteIpAddress}")
+                    handleTriggerRemoteStream(session)
                 } else {
-                    // Use Status.METHOD_NOT_ALLOWED directly
-                    val response = newFixedLengthResponse(Status.METHOD_NOT_ALLOWED, MIME_PLAINTEXT, "Method Not Allowed")
-                    response.addHeader("Access-Control-Allow-Origin", "*")
-                    return response
+                    newFixedLengthResponse(Status.METHOD_NOT_ALLOWED, MIME_PLAINTEXT, "Method Not Allowed").apply {
+                        addHeader("Access-Control-Allow-Origin", "*")
+                    }
                 }
             }
 
-            // Existing handler for /toggle-stream (local stream)
             if ("/toggle-stream" == uri && Method.GET == session.method) {
                 handleToggleStream() // This is for the local CameraStreamActivity
-                 // Use Status.OK directly
-                val response = newFixedLengthResponse(Status.OK, MIME_PLAINTEXT, "Signal received, toggling local stream.")
-                response.addHeader("Access-Control-Allow-Origin", "*")
-                return response
+                return newFixedLengthResponse(Status.OK, MIME_PLAINTEXT, "Signal received, toggling local stream.").apply {
+                    addHeader("Access-Control-Allow-Origin", "*")
+                }
             }
 
             // For other requests, return 404
-            // Use Status.NOT_FOUND directly
-            val response = newFixedLengthResponse(Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
-            response.addHeader("Access-Control-Allow-Origin", "*")
-            return response
+            return newFixedLengthResponse(Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found").apply {
+                addHeader("Access-Control-Allow-Origin", "*")
+            }
         }
     }
 
     private fun handleTriggerRemoteStream(session: IHTTPSession): Response {
         return if (!isRemoteCameraActivityRunning) {
-            Log.d(TAG, "Starting RemoteCameraViewActivity.")
+            Log.d(TAG, "Attempting to start RemoteCameraViewActivity.")
             val remoteIpAddress = session.remoteIpAddress
             val intent = Intent(this@NetworkSignalService, RemoteCameraViewActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -100,15 +92,18 @@ class NetworkSignalService : Service() {
             }
             try {
                 startActivity(intent)
-                Log.d(TAG, "Attempting to start RemoteCameraViewActivity for IP: $remoteIpAddress")
-                // Use Status.OK directly
+                Log.i(TAG, "RemoteCameraViewActivity started successfully for IP: $remoteIpAddress")
                 NanoHTTPD.newFixedLengthResponse(Status.OK, NanoHTTPD.MIME_PLAINTEXT, "Remote stream started.").apply {
                     addHeader("Access-Control-Allow-Origin", "*")
                 }
             } catch (e: ActivityNotFoundException) {
-                Log.e(TAG, "RemoteCameraViewActivity not found. Did you declare it in AndroidManifest.xml?", e)
-                // Corrected to Status.INTERNAL_ERROR
+                Log.e(TAG, "RemoteCameraViewActivity not found. Check AndroidManifest.xml.", e)
                 NanoHTTPD.newFixedLengthResponse(Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, "Server error: Target activity not found.").apply {
+                    addHeader("Access-Control-Allow-Origin", "*")
+                }
+            } catch (e: Exception) { // Catch any other exceptions during startActivity
+                Log.e(TAG, "Failed to start RemoteCameraViewActivity due to an unexpected error.", e)
+                NanoHTTPD.newFixedLengthResponse(Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, "Server error: Could not start remote view. ${e.localizedMessage}").apply {
                     addHeader("Access-Control-Allow-Origin", "*")
                 }
             }
@@ -116,7 +111,6 @@ class NetworkSignalService : Service() {
             Log.d(TAG, "Sending close broadcast to RemoteCameraViewActivity.")
             val intent = Intent(ACTION_CLOSE_REMOTE_CAMERA_VIEW)
             sendBroadcast(intent)
-            // Use Status.OK directly
             NanoHTTPD.newFixedLengthResponse(Status.OK, NanoHTTPD.MIME_PLAINTEXT, "Remote stream stopped.").apply {
                 addHeader("Access-Control-Allow-Origin", "*")
             }
@@ -130,7 +124,7 @@ class NetworkSignalService : Service() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
-            isStreamActivityRunning = true
+            // isStreamActivityRunning will be set to true by CameraStreamActivity
         } else {
             Log.d(TAG, "Sending close broadcast to CameraStreamActivity.")
             val intent = Intent(ACTION_CLOSE_CAMERA_STREAM)

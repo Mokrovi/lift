@@ -11,11 +11,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Menu // <-- ИЗМЕНЕННЫЙ ИМПОРТ
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate // <--- ДОБАВЛЕН ИМПОРТ
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -170,7 +172,12 @@ fun WidgetDisplayItem(
                     }
                     WidgetType.CAMERA -> {
                         widgetData.mediaUri?.let {
-                            Image(painter = rememberAsyncImagePainter(model = it), contentDescription = "Camera feed", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                            Image(
+                                painter = rememberAsyncImagePainter(model = it),
+                                contentDescription = "Camera feed",
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp)),
+                                contentScale = ContentScale.Crop
+                            )
                         } ?: Text("Нет сигнала", style = MaterialTheme.typography.bodyLarge)
                     }
                     WidgetType.ONVIF_CAMERA -> {
@@ -181,7 +188,10 @@ fun WidgetDisplayItem(
                         val testCameraData = widgetData.copy(
                             mediaUri = Uri.parse(testMjpegUrl)
                         )
-                        OnvifCameraDisplay(widgetData = testCameraData, modifier = Modifier.fillMaxSize())
+                        OnvifCameraDisplay(
+                            widgetData = testCameraData,
+                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp))
+                        )
 
                     }
                     WidgetType.AD -> {
@@ -200,20 +210,24 @@ fun WidgetDisplayItem(
                             Image(
                                 painter = painter,
                                 contentDescription = "Advertisement background",
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp)),
                                 contentScale = ContentScale.Fit
                             )
                         } ?: Text("Advertisement Area", style = MaterialTheme.typography.bodyLarge)
                     }
                     WidgetType.TEXT -> {
-                        Text(widgetData.textData ?: "Text widget", style = MaterialTheme.typography.bodyLarge)
+                        EditableTextWidget(
+                            initialWidgetData = widgetData,
+                            onWidgetDataChange = onUpdate, // Передаем существующий onUpdate
+                            modifier = Modifier.fillMaxSize() // Чтобы занимал все доступное место в Card
+                        )
                     }
                     WidgetType.GIF -> {
                         widgetData.mediaUri?.let {
                             GifImage(
                                 data = it,
                                 contentDescription = "GIF image",
-                                modifier = Modifier.fillMaxSize()
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp))
                             )
                         } ?: Text("No GIF selected", style = MaterialTheme.typography.bodyLarge)
                     }
@@ -221,7 +235,7 @@ fun WidgetDisplayItem(
                         widgetData.mediaUri?.let {
                             VideoPlayer(
                                 videoUri = it,
-                                modifier = Modifier.fillMaxSize()
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp))
                             )
                         } ?: Text("No video selected", style = MaterialTheme.typography.bodyLarge)
                     }
@@ -262,10 +276,12 @@ fun WidgetDisplayItem(
 
                     // Ручка для изменения размера
                     Box(
+                        contentAlignment = Alignment.Center, 
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .size(24.dp)
-                            .background(Color.Transparent)
+                            .size(40.dp) 
+                            .clip(CircleShape) 
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) 
                             .pointerInput(isEditMode, widgetData) {
                                 if (isEditMode) {
                                     detectDragGestures(
@@ -295,7 +311,16 @@ fun WidgetDisplayItem(
                                     )
                                 }
                             }
-                    )
+                    ) {
+                        Icon(
+                            Icons.Filled.Menu, 
+                            contentDescription = "Изменить размер",
+                            modifier = Modifier
+                                .size(24.dp)
+                                .rotate(-45f), // <--- ДОБАВЛЕН ПОВОРОТ 
+                            tint = MaterialTheme.colorScheme.onPrimary 
+                        )
+                    }
                 }
             }
         }

@@ -16,16 +16,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items // items должен быть импортирован
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState // Added import for scroll
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll // Added import for scroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme // Added import
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch // Added import
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField // Added import for TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,23 +46,21 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-// import androidx.compose.ui.text.toLowerCase // Удалено
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.HorizontalAlignmentMode
 import com.example.myapplication.WidgetData
 import kotlin.math.roundToInt
-// Импорт для titlecase, если потребуется явный (обычно java.util.* доступен)
-// import java.util.Locale
 
 @Composable
 fun TextEditDialog(
     showDialog: Boolean,
     widgetData: WidgetData,
     onDismissRequest: () -> Unit,
-    onSave: (newBackgroundColor: Int?, newTextColor: Int?, newTextSize: Int?, newIsVertical: Boolean, newHorizontalAlignment: HorizontalAlignmentMode) -> Unit
+    onSave: (newTextData: String, newBackgroundColor: Int?, newTextColor: Int?, newTextSize: Int?, newIsVertical: Boolean, newHorizontalAlignment: HorizontalAlignmentMode) -> Unit
 ) {
     if (showDialog) {
+        var tempTextData by remember(widgetData.id, widgetData.textData) { mutableStateOf(widgetData.textData ?: "") }
         var tempBackgroundColor by remember(widgetData.id, widgetData.backgroundColor) { mutableStateOf(widgetData.backgroundColor ?: Color.Transparent.toArgb()) }
         var tempTextColor by remember(widgetData.id, widgetData.textColor) { mutableStateOf(widgetData.textColor ?: Color.Black.toArgb()) }
         var tempTextSize by remember(widgetData.id, widgetData.textSize) { mutableStateOf((widgetData.textSize ?: 16).toFloat()) }
@@ -75,7 +76,15 @@ fun TextEditDialog(
             onDismissRequest = onDismissRequest,
             title = { Text("Edit Text Properties") },
             text = {
-                Column {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) { // Added scroll for potentially long content
+                    TextField(
+                        value = tempTextData,
+                        onValueChange = { tempTextData = it },
+                        label = { Text("Widget Text") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     Text("Background Color:", fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyRow(
@@ -161,13 +170,14 @@ fun TextEditDialog(
                         value = tempTextSize,
                         onValueChange = { tempTextSize = it },
                         valueRange = 8f..100f,
-                        steps = (100-8) -1
+                        steps = (100-8) -1 // Ensure steps is an Int for discrete steps
                     )
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     onSave(
+                        tempTextData,
                         if (tempBackgroundColor == Color.Transparent.toArgb() && widgetData.backgroundColor == null) null else tempBackgroundColor,
                         tempTextColor,
                         tempTextSize.roundToInt(),
@@ -284,8 +294,9 @@ fun EditableTextWidget(
             showDialog = true,
             widgetData = widgetDataState,
             onDismissRequest = { showEditDialog = false },
-            onSave = { newBackgroundColor, newTextColor, newTextSize, newIsVertical, newHorizontalAlignment ->
+            onSave = { newTextData, newBackgroundColor, newTextColor, newTextSize, newIsVertical, newHorizontalAlignment ->
                 val updatedWidgetData = widgetDataState.copy(
+                    textData = newTextData, // Added textData update
                     backgroundColor = newBackgroundColor,
                     textColor = newTextColor,
                     textSize = newTextSize,

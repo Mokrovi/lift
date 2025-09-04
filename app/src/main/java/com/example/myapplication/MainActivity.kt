@@ -59,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale // Added import for ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
@@ -66,6 +67,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import coil.compose.AsyncImage // Added import for AsyncImage
 import com.example.myapplication.data.WidgetRepository
 import com.example.myapplication.ui.discoverTrD3121Camera // Исправленный импорт
 import com.example.myapplication.ui.WidgetCanvas
@@ -344,7 +346,14 @@ class MainActivity : ComponentActivity() {
                                 .padding(paddingValues)
                                 .background(if (canvasImageBackground != null) Color.Transparent else canvasBackgroundColor)
                         ) {
-                            // TODO: Add CoilImage if canvasImageBackground is not null
+                            canvasImageBackground?.let { uri ->
+                                AsyncImage(
+                                    model = uri,
+                                    contentDescription = "Фоновое изображение холста",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
                             WidgetCanvas(
                                 widgetManager = widgetManager,
                                 isEditMode = isEditMode,

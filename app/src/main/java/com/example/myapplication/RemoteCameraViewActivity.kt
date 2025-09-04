@@ -45,7 +45,8 @@ class RemoteCameraViewActivity : AppCompatActivity() {
 
         if (remoteIpAddress != null) {
             Log.d(TAG, "Received IP Address: $remoteIpAddress")
-            val streamUrlForStatus = "rtsp://$remoteIpAddress:8554/live/stream"
+            // MODIFIED PORT HERE
+            val streamUrlForStatus = "rtsp://$remoteIpAddress:5554/live/stream"
             statusTextView.text = "Attempting to stream from: $streamUrlForStatus"
         } else {
             Log.e(TAG, "No IP Address received in Intent. Finishing activity.")
@@ -70,7 +71,8 @@ class RemoteCameraViewActivity : AppCompatActivity() {
             return
         }
 
-        val streamUrl = "rtsp://$remoteIpAddress:8554/live/stream"
+        // MODIFIED PORT HERE
+        val streamUrl = "rtsp://$remoteIpAddress:5554/live/stream"
         Log.d(TAG, "Initializing player for URL: $streamUrl")
 
         try {

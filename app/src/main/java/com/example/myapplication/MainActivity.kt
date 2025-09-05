@@ -3,7 +3,8 @@ package com.example.myapplication
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.Intent // Added Intent import
+import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.net.Uri
@@ -19,10 +20,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -51,25 +50,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.Saver
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale // Added import for ContentScale
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import coil.compose.AsyncImage // Added import for AsyncImage
+import coil.compose.AsyncImage
 import com.example.myapplication.data.WidgetRepository
-import com.example.myapplication.ui.discoverTrD3121Camera // Исправленный импорт
+import com.example.myapplication.ui.discoverTrD3121Camera
 import com.example.myapplication.ui.WidgetCanvas
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.launch
@@ -78,11 +74,18 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
 
+// SharedPreferences Keys
+private const val PREFS_NAME = "main_screen_prefs"
+private const val KEY_BACKGROUND_TYPE = "main_background_type"
+private const val KEY_BACKGROUND_COLOR_ARGB = "main_background_color_argb"
+private const val KEY_BACKGROUND_IMAGE_URI = "main_background_image_uri"
+
 class MainActivity : ComponentActivity() {
 
     private lateinit var widgetManager: WidgetManager
     private lateinit var widgetRepository: WidgetRepository
     private lateinit var windowInsetsController: WindowInsetsControllerCompat
+    private lateinit var sharedPreferences: SharedPreferences
 
     private var hasLocationPermission by mutableStateOf(false)
 
@@ -136,39 +139,57 @@ class MainActivity : ComponentActivity() {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
 
+        sharedPreferences = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         widgetRepository = WidgetRepository(applicationContext)
         val loadedWidgets = widgetRepository.loadWidgets()
         widgetManager = WidgetManager(loadedWidgets)
 
-        // Start NetworkSignalService
         startService(Intent(this, NetworkSignalService::class.java))
 
         setContent {
             MyApplicationTheme {
                 val context = LocalContext.current
-                var systemBarsVisible by rememberSaveable { mutableStateOf(false) }
-                var isEditMode by rememberSaveable { mutableStateOf(false) }
+                var systemBarsVisible by remember { mutableStateOf(false) } // No need for rememberSaveable if not surviving config change by itself
+                var isEditMode by remember { mutableStateOf(false) }
                 val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-                val scope = rememberCoroutineScope() // <--- Scope for coroutines
+                val scope = rememberCoroutineScope()
                 var currentDialogWidgetType by remember { mutableStateOf<WidgetType?>(null) }
                 var locationString by remember { mutableStateOf("Location: Unknown") }
 
-                var canvasImageBackground by rememberSaveable { mutableStateOf<Uri?>(null) }
+                // Load background preferences
+                val initialBackgroundType = remember { sharedPreferences.getString(KEY_BACKGROUND_TYPE, "color") ?: "color" }
+                val initialBackgroundColorArgb = remember { sharedPreferences.getInt(KEY_BACKGROUND_COLOR_ARGB, Color.LightGray.toArgb()) }
+                val initialBackgroundImageUriString = remember { sharedPreferences.getString(KEY_BACKGROUND_IMAGE_URI, null) }
 
-                val ColorSaver = Saver<Color, Int>(
-                    save = { it.toArgb() },
-                    restore = { Color(it) }
-                )
-                var canvasBackgroundColor by rememberSaveable(stateSaver = ColorSaver) { mutableStateOf(Color.LightGray) }
+                var backgroundType by remember { mutableStateOf(initialBackgroundType) }
+                var canvasBackgroundColor by remember { mutableStateOf(Color(initialBackgroundColorArgb)) }
+                var canvasImageBackgroundUriString by remember { mutableStateOf(initialBackgroundImageUriString) }
 
                 var showTextInputDialog by remember { mutableStateOf(false) }
                 var currentTextValue by remember { mutableStateOf("") }
 
-
                 val imagePickerLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocument(),
                     onResult = { uri: Uri? ->
-                        uri?.let { canvasImageBackground = it } // For background, direct URI might be okay, or copy too if needed
+                        uri?.let {
+                            try {
+                                context.contentResolver.takePersistableUriPermission(
+                                    it,
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                )
+                                canvasImageBackgroundUriString = it.toString()
+                                backgroundType = "image"
+                                with(sharedPreferences.edit()) {
+                                    putString(KEY_BACKGROUND_TYPE, "image")
+                                    putString(KEY_BACKGROUND_IMAGE_URI, it.toString())
+                                    remove(KEY_BACKGROUND_COLOR_ARGB)
+                                    apply()
+                                }
+                            } catch (e: SecurityException) {
+                                e.printStackTrace()
+                                Toast.makeText(context, "Failed to get permission for image.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     }
                 )
 
@@ -273,7 +294,16 @@ class MainActivity : ComponentActivity() {
                                 Text("Выбрать изображение фона")
                             }
                             Button(
-                                onClick = { canvasImageBackground = null },
+                                onClick = {
+                                    canvasImageBackgroundUriString = null
+                                    backgroundType = "color" // Revert to current color
+                                    with(sharedPreferences.edit()) {
+                                        putString(KEY_BACKGROUND_TYPE, "color")
+                                        putInt(KEY_BACKGROUND_COLOR_ARGB, canvasBackgroundColor.toArgb())
+                                        remove(KEY_BACKGROUND_IMAGE_URI)
+                                        apply()
+                                    }
+                                },
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
                             ) {
                                 Text("Сбросить фон")
@@ -281,11 +311,20 @@ class MainActivity : ComponentActivity() {
                             Divider(modifier = Modifier.padding(vertical = 8.dp))
                             Text("Цвет фона", modifier = Modifier.padding(16.dp))
                             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                ColorButton(color = Color.LightGray) { canvasBackgroundColor = Color.LightGray }
-                                ColorButton(color = Color.White) { canvasBackgroundColor = Color.White }
-                                ColorButton(color = Color.Black) { canvasBackgroundColor = Color.Black }
-                                ColorButton(color = Color.Blue) { canvasBackgroundColor = Color.Blue }
-                                ColorButton(color = Color.Green) { canvasBackgroundColor = Color.Green }
+                                val colors = listOf(Color.LightGray, Color.White, Color.Black, Color.Blue, Color.Green)
+                                colors.forEach { color ->
+                                    ColorButton(color = color) {
+                                        canvasBackgroundColor = color
+                                        canvasImageBackgroundUriString = null
+                                        backgroundType = "color"
+                                        with(sharedPreferences.edit()) {
+                                            putString(KEY_BACKGROUND_TYPE, "color")
+                                            putInt(KEY_BACKGROUND_COLOR_ARGB, color.toArgb())
+                                            remove(KEY_BACKGROUND_IMAGE_URI)
+                                            apply()
+                                        }
+                                    }
+                                }
                             }
                             Divider(modifier = Modifier.padding(vertical = 8.dp))
                             Button(
@@ -305,6 +344,7 @@ class MainActivity : ComponentActivity() {
                     gesturesEnabled = isEditMode || drawerState.isOpen
                 ) {
                     Scaffold(
+                        containerColor = Color.Transparent, // Make scaffold transparent to see Box background
                         topBar = {
                             if (systemBarsVisible) {
                                 TopAppBar(
@@ -320,7 +360,7 @@ class MainActivity : ComponentActivity() {
                                             checked = isEditMode,
                                             onCheckedChange = { isEditMode = it }
                                         )
-                                        IconButton(onClick = { currentDialogWidgetType = WidgetType.CLOCK /* Placeholder to show dialog */ }) {
+                                        IconButton(onClick = { currentDialogWidgetType = WidgetType.CLOCK }) {
                                             Icon(Icons.Filled.Add, contentDescription = "Добавить виджет")
                                         }
                                     }
@@ -344,15 +384,23 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(paddingValues)
-                                .background(if (canvasImageBackground != null) Color.Transparent else canvasBackgroundColor)
-                        ) {
-                            canvasImageBackground?.let { uri ->
-                                AsyncImage(
-                                    model = uri,
-                                    contentDescription = "Фоновое изображение холста",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
+                                .background(
+                                    if (backgroundType == "image" && canvasImageBackgroundUriString != null) {
+                                        Color.Transparent // Image will be drawn by AsyncImage
+                                    } else {
+                                        canvasBackgroundColor
+                                    }
                                 )
+                        ) {
+                            if (backgroundType == "image") {
+                                canvasImageBackgroundUriString?.let { uriString ->
+                                    AsyncImage(
+                                        model = Uri.parse(uriString),
+                                        contentDescription = "Фоновое изображение холста",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
                             }
                             WidgetCanvas(
                                 widgetManager = widgetManager,
@@ -454,9 +502,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // onStop() remains without automatic save
     override fun onStop() {
         super.onStop()
+        // Consider if any unsaved changes to widgets or background should be committed here,
+        // though button clicks already save.
     }
 
 

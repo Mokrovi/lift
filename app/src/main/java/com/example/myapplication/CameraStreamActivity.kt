@@ -31,6 +31,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player // Added import
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.rtsp.RtspMediaSource
@@ -93,7 +94,10 @@ class CameraStreamActivity : ComponentActivity() {
                                 .fillMaxWidth()
                                 .aspectRatio(16 / 9f)
                         ) {
-                            CameraStreamPlayer(STREAM_URL)
+                            CameraStreamPlayer(STREAM_URL) {
+                                logMessage("CameraStreamActivity", "Playback ended. Finishing activity.")
+                                finish()
+                            }
                         }
                         LogsDisplay(
                             logMessages = logMessages,
@@ -118,7 +122,7 @@ class CameraStreamActivity : ComponentActivity() {
 @UnstableApi
 @OptIn(UnstableApi::class)
 @Composable
-fun CameraStreamPlayer(streamUrl: String) {
+fun CameraStreamPlayer(streamUrl: String, onPlaybackEnded: () -> Unit) {
     val context = LocalContext.current
     @OptIn(UnstableApi::class)
     val exoPlayer = remember {
@@ -149,8 +153,18 @@ fun CameraStreamPlayer(streamUrl: String) {
             }
     }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(key1 = exoPlayer, key2 = onPlaybackEnded) {
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED) {
+                    onPlaybackEnded()
+                }
+            }
+        }
+        exoPlayer.addListener(listener)
+
         onDispose {
+            exoPlayer.removeListener(listener)
             exoPlayer.release()
         }
     }

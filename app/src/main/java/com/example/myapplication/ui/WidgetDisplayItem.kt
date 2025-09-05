@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
+import androidx.compose.ui.unit.sp // <--- ДОБАВЛЕН ИМПОРТ
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import coil.size.Precision
@@ -153,7 +154,11 @@ fun WidgetDisplayItem(
             border = if (isColliding) {
                 BorderStroke(collidingBorderWidth, Color.Red)
             } else {
-                BorderStroke(normalBorderWidth, MaterialTheme.colorScheme.outline)
+                if (widgetData.type == WidgetType.WEATHER) {
+                    BorderStroke(3.dp, MaterialTheme.colorScheme.outline) // MODIFIED HERE
+                } else {
+                    BorderStroke(normalBorderWidth, MaterialTheme.colorScheme.outline)
+                }
             }
         ) {
             Box(modifier = Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.Center) {
@@ -168,7 +173,7 @@ fun WidgetDisplayItem(
                                 delay(1000L)
                             }
                         }
-                        Text(currentTime, style = MaterialTheme.typography.bodyLarge)
+                        Text(currentTime, fontSize = (currentHeight.value / 3).sp)
                     }
                     WidgetType.CAMERA -> {
                         widgetData.mediaUri?.let {

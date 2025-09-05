@@ -22,8 +22,8 @@ data class WidgetData(
     var height: Int,
     var cornerRadius: Int = 12,
     var mediaUri: Uri? = null,
-    var backgroundColor: Int? = null,
-    var textColor: Int? = null,
+    var backgroundColor: Int? = null, // Will be used for weather widget background
+    var textColor: Int? = null,       // Will be used for weather widget text color
     var textSize: Int? = null,
     var isVertical: Boolean = false,
     var horizontalAlignment: HorizontalAlignmentMode = HorizontalAlignmentMode.LEFT,
@@ -34,8 +34,11 @@ data class WidgetData(
     var letterSpacingSp: Float? = null,
     var fontWeight: Int? = null, // <--- НОВОЕ ПОЛЕ ДЛЯ ЖИРНОСТИ
     // Weather-specific data
-    var cityName: String? = null,
+    var cityName: String? = null, // This will be used if autoLocate is false OR as a display name
     var temperature: Double? = null,
     var weatherDescription: String? = null,
-    var weatherIconUrl: String? = null
+    var weatherIconUrl: String? = null,
+    // New weather settings fields
+    var autoLocate: Boolean = true,
+    var manualCityName: String? = null // City to use if autoLocate is false
 )

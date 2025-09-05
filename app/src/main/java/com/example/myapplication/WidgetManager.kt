@@ -1,6 +1,7 @@
 package com.example.myapplication
 
 import android.net.Uri
+import android.util.Log // Добавим для логирования ошибок
 import com.example.myapplication.data.WeatherRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,18 +24,16 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
     fun updateCurrentLocation(latitude: Double?, longitude: Double?) {
         currentLatitude = latitude
         currentLongitude = longitude
-        // После обновления местоположения, запросить данные для всех существующих виджетов погоды
         _widgets.value.forEach { widget ->
-            if (widget.type == WidgetType.WEATHER) {
+            if (widget.type == WidgetType.WEATHER && widget.autoLocate) { // Обновляем только если в авто-режиме
                 fetchWeatherData(widget.id)
             }
         }
     }
 
-    // Изменяем тип mediaUri на String? чтобы соответствовать RTSP URL
     fun addWidget(
         type: WidgetType,
-        mediaUri: String? = null, // Параметр функции остается String?
+        mediaUri: String? = null,
         textData: String? = null
     ): Boolean {
         val currentWidgets = _widgets.value
@@ -49,51 +48,35 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
 
         while (collision && attempts < maxAttempts) {
             collision = false
-            // При создании WidgetData для проверки коллизий, конвертируем String? в Uri?
             val potentialWidgetBounds = WidgetData(
-                id = "temp_id_${UUID.randomUUID()}",
-                type = type,
-                x = newX.toInt(),
-                y = newY.toInt(),
-                width = widgetWidth.toInt(),
-                height = widgetHeight.toInt(),
-                mediaUri = mediaUri?.let { Uri.parse(it) }, // Конвертация
-                textData = if (type == WidgetType.TEXT) textData else null,
-                cityName = null
+                id = "temp_id_${UUID.randomUUID()}", type = type,
+                x = newX.toInt(), y = newY.toInt(),
+                width = widgetWidth.toInt(), height = widgetHeight.toInt(),
+                mediaUri = mediaUri?.let { Uri.parse(it) },
+                textData = if (type == WidgetType.TEXT) textData else null
             )
             if (checkCollisionInternal(potentialWidgetBounds, newX, newY, widgetWidth, widgetHeight, currentWidgets)) {
                 collision = true
                 newX += widgetWidth + 16f
-                if (newX + widgetWidth > 1000f) { // Assuming a canvas width limit
+                if (newX + widgetWidth > 1000f) {
                     newX = 16f
                     newY += widgetHeight + 16f
                 }
             }
             attempts++
-            if (newY + widgetHeight > 2000f) { // Assuming a canvas height limit
-                return false
-            }
+            if (newY + widgetHeight > 2000f) return false
         }
-
-        if (attempts >= maxAttempts) {
-            return false
-        }
+        if (attempts >= maxAttempts) return false
 
         val newWidgetId = UUID.randomUUID().toString()
-        // При создании финального WidgetData, также конвертируем String? в Uri?
         val newWidget = WidgetData(
-            id = newWidgetId,
-            type = type,
-            x = newX.toInt(),
-            y = newY.toInt(),
-            width = widgetWidth.toInt(),
-            height = widgetHeight.toInt(),
-            mediaUri = mediaUri?.let { Uri.parse(it) }, // Конвертация
-            textData = if (type == WidgetType.TEXT) textData else null,
-            cityName = null
+            id = newWidgetId, type = type,
+            x = newX.toInt(), y = newY.toInt(),
+            width = widgetWidth.toInt(), height = widgetHeight.toInt(),
+            mediaUri = mediaUri?.let { Uri.parse(it) },
+            textData = if (type == WidgetType.TEXT) textData else null
         )
         _widgets.value = currentWidgets + newWidget
-
         if (type == WidgetType.WEATHER) {
             fetchWeatherData(newWidgetId)
         }
@@ -103,38 +86,18 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
     fun fetchWeatherData(widgetId: String) {
         val widget = _widgets.value.find { it.id == widgetId }
         if (widget == null || widget.type != WidgetType.WEATHER) {
+            Log.d("WidgetManager", "fetchWeatherData: Widget not found or not a weather widget. ID: $widgetId")
             return
         }
 
         coroutineScope.launch {
-            val lat = currentLatitude
-            val lon = currentLongitude
-
-            if (lat != null && lon != null) {
-                val weatherInfo = weatherRepository.getCurrentWeatherByCoordinates(lat, lon)
-                if (weatherInfo != null) {
-                    _widgets.value = _widgets.value.map {
-                        if (it.id == widgetId) {
-                            it.copy(
-                                temperature = weatherInfo.main.temperature,
-                                weatherDescription = weatherInfo.weather.firstOrNull()?.description,
-                                weatherIconUrl = weatherInfo.weather.firstOrNull()?.icon?.let { iconCode ->
-                                    "https://openweathermap.org/img/wn/$iconCode@2x.png"
-                                },
-                                cityName = weatherInfo.cityName
-                            )
-                        } else {
-                            it
-                        }
-                    }
-                }
-            } else {
-                // val currentWidgetCityName = widget.cityName // This would require cityName in WidgetData to be Uri?
-                // For now, let's assume if lat/lon are null, we don't fetch by city name from widget
-                // Or, WidgetData needs a separate cityName field of type String?
-                 val currentWidgetCityName = widget.cityName // Assuming cityName is String? in WidgetData
-                if (currentWidgetCityName != null) {
-                    val weatherInfo = weatherRepository.getCurrentWeatherByCityName(currentWidgetCityName)
+            if (widget.autoLocate) {
+                Log.d("WidgetManager", "Fetching weather for widget ${widget.id} in AUTO mode.")
+                val lat = currentLatitude
+                val lon = currentLongitude
+                if (lat != null && lon != null) {
+                    Log.d("WidgetManager", "Using coordinates: Lat=$lat, Lon=$lon")
+                    val weatherInfo = weatherRepository.getCurrentWeatherByCoordinates(lat, lon)
                     if (weatherInfo != null) {
                         _widgets.value = _widgets.value.map {
                             if (it.id == widgetId) {
@@ -143,23 +106,94 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
                                     weatherDescription = weatherInfo.weather.firstOrNull()?.description,
                                     weatherIconUrl = weatherInfo.weather.firstOrNull()?.icon?.let { iconCode ->
                                         "https://openweathermap.org/img/wn/$iconCode@2x.png"
-                                    }
-                                    // cityName will remain as it was or be updated if API provides it
+                                    },
+                                    cityName = weatherInfo.cityName // Обновляем cityName из API
                                 )
-                            } else {
-                                it
-                            }
+                            } else { it }
                         }
+                        Log.d("WidgetManager", "Weather data updated for widget ${widget.id} (Auto): ${weatherInfo.cityName}")
+                    } else {
+                         Log.e("WidgetManager", "Failed to get weather by coords for widget ${widget.id}")
+                    }
+                } else {
+                    Log.w("WidgetManager", "Auto mode for widget ${widget.id}, but location (lat/lon) is unavailable.")
+                    _widgets.value = _widgets.value.map {
+                        if (it.id == widgetId) {
+                            it.copy(
+                                temperature = null,
+                                weatherDescription = "Location unavailable",
+                                weatherIconUrl = null,
+                                cityName = "N/A" // Или оставить widget.cityName
+                            )
+                        } else { it }
+                    }
+                }
+            } else { // Ручной режим (autoLocate = false)
+                val cityNameToFetch = widget.cityName // Должен быть равен manualCityName из WidgetData, установленным в onSaveSettings
+                Log.d("WidgetManager", "Fetching weather for widget ${widget.id} in MANUAL mode for city: '$cityNameToFetch'")
+                if (!cityNameToFetch.isNullOrBlank()) {
+                    val weatherInfo = weatherRepository.getCurrentWeatherByCityName(cityNameToFetch)
+                    if (weatherInfo != null) {
+                        _widgets.value = _widgets.value.map {
+                            if (it.id == widgetId) {
+                                it.copy(
+                                    temperature = weatherInfo.main.temperature,
+                                    weatherDescription = weatherInfo.weather.firstOrNull()?.description,
+                                    weatherIconUrl = weatherInfo.weather.firstOrNull()?.icon?.let { iconCode ->
+                                        "https://openweathermap.org/img/wn/$iconCode@2x.png"
+                                    },
+                                    cityName = weatherInfo.cityName // Можно обновить cityName из API, если он возвращает каноническое имя
+                                )
+                            } else { it }
+                        }
+                         Log.d("WidgetManager", "Weather data updated for widget ${widget.id} (Manual): ${weatherInfo.cityName}")
+                    } else {
+                        Log.e("WidgetManager", "Failed to get weather by city '$cityNameToFetch' for widget ${widget.id}")
+                        _widgets.value = _widgets.value.map {
+                            if (it.id == widgetId) {
+                                it.copy(
+                                    temperature = null,
+                                    weatherDescription = "City not found: $cityNameToFetch",
+                                    weatherIconUrl = null,
+                                    cityName = cityNameToFetch // Оставляем введенное пользователем имя
+                                )
+                            } else { it }
+                        }
+                    }
+                } else {
+                     Log.w("WidgetManager", "Manual mode for widget ${widget.id}, but city name is blank.")
+                    _widgets.value = _widgets.value.map {
+                        if (it.id == widgetId) {
+                            it.copy(
+                                temperature = null,
+                                weatherDescription = "Please specify a city",
+                                weatherIconUrl = null,
+                                cityName = null
+                            )
+                        } else { it }
                     }
                 }
             }
         }
     }
 
-
     fun updateWidget(updatedWidget: WidgetData) {
+        val previousWidgetState = _widgets.value.find { it.id == updatedWidget.id }
+
         _widgets.value = _widgets.value.map {
             if (it.id == updatedWidget.id) updatedWidget else it
+        }
+
+        if (updatedWidget.type == WidgetType.WEATHER) {
+            val needsRefresh = updatedWidget.temperature == null || // Данные были сброшены, нужна загрузка
+                               (updatedWidget.autoLocate && previousWidgetState?.autoLocate == false) || // Переключились на авто
+                               (!updatedWidget.autoLocate && previousWidgetState?.autoLocate == true && !updatedWidget.cityName.isNullOrBlank()) || // Переключились на ручной с указанным городом
+                               (!updatedWidget.autoLocate && previousWidgetState?.cityName != updatedWidget.cityName && !updatedWidget.cityName.isNullOrBlank()) // Остались в ручном, но город изменился
+
+            if (needsRefresh) {
+                Log.d("WidgetManager", "Widget ${updatedWidget.id} updated, needs weather refresh. Auto: ${updatedWidget.autoLocate}, City: ${updatedWidget.cityName}, TempIsNull: ${updatedWidget.temperature == null}")
+                fetchWeatherData(updatedWidget.id)
+            }
         }
     }
 
@@ -168,36 +202,23 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
     }
 
     fun checkCollisionWithExisting(
-        widgetToCheck: WidgetData,
-        newX: Float,
-        newY: Float,
-        newWidth: Float,
-        newHeight: Float
+        widgetToCheck: WidgetData, newX: Float, newY: Float, newWidth: Float, newHeight: Float
     ): Boolean {
         return checkCollisionInternal(widgetToCheck, newX, newY, newWidth, newHeight, _widgets.value, true)
     }
 
     private fun checkCollisionInternal(
-        widget: WidgetData,
-        checkX: Float,
-        checkY: Float,
-        checkWidth: Float,
-        checkHeight: Float,
-        widgetsToCompareAgainst: List<WidgetData>,
-        ignoreSelf: Boolean = false
+        widget: WidgetData, checkX: Float, checkY: Float, checkWidth: Float, checkHeight: Float,
+        widgetsToCompareAgainst: List<WidgetData>, ignoreSelf: Boolean = false
     ): Boolean {
         val widgetRight = checkX + checkWidth
         val widgetBottom = checkY + checkHeight
-
         for (existingWidget in widgetsToCompareAgainst) {
-            if (ignoreSelf && existingWidget.id == widget.id) {
-                continue
-            }
+            if (ignoreSelf && existingWidget.id == widget.id) continue
             if (checkX < existingWidget.x + existingWidget.width &&
                 widgetRight > existingWidget.x &&
                 checkY < existingWidget.y + existingWidget.height &&
-                widgetBottom > existingWidget.y
-            ) {
+                widgetBottom > existingWidget.y) {
                 return true
             }
         }

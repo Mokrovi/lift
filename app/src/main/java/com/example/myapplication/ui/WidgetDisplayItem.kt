@@ -96,6 +96,7 @@ fun WidgetDisplayItem(
 
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showClockStyleDialog by remember(widgetData.id) { mutableStateOf(false) } // For clock style editing
+    var showWeatherSettingsDialog by remember(widgetData.id) { mutableStateOf(false) } // For weather settings
 
     if (showDeleteDialog) {
         AlertDialog(
@@ -154,21 +155,22 @@ fun WidgetDisplayItem(
             border = if (isColliding) {
                 BorderStroke(collidingBorderWidth, Color.Red)
             } else {
-                if (widgetData.type == WidgetType.WEATHER) {
-                    BorderStroke(3.dp, MaterialTheme.colorScheme.outline) 
-                } else {
-                    BorderStroke(normalBorderWidth, MaterialTheme.colorScheme.outline)
-                }
+                BorderStroke(normalBorderWidth, MaterialTheme.colorScheme.outline)
             }
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(8.dp), // General padding for content within the card
-                contentAlignment = Alignment.Center // Default center alignment for the card's content box
+                    .padding(8.dp), 
+                contentAlignment = Alignment.Center 
             ) {
                 when (widgetData.type) {
-                    WidgetType.WEATHER -> WeatherWidgetCard(widget = widgetData)
+                    WidgetType.WEATHER -> WeatherWidgetCard(
+                        widget = widgetData,
+                        onWeatherSettingsClick = { showWeatherSettingsDialog = true },
+                        textColor = widgetData.textColor?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface,
+                        backgroundColor = widgetData.backgroundColor?.let { Color(it) } ?: Color.Transparent
+                    )
                     WidgetType.CLOCK -> {
                         var currentTime by remember { mutableStateOf("") }
                         LaunchedEffect(Unit) {
@@ -218,7 +220,7 @@ fun WidgetDisplayItem(
                                     onUpdate(updatedWidgetData)
                                     showClockStyleDialog = false
                                 },
-                                isTextContentEditable = false // For Clock, text content is not editable
+                                isTextContentEditable = false 
                             )
                         }
                     }
@@ -297,7 +299,6 @@ fun WidgetDisplayItem(
                         Icon(Icons.Filled.Delete, contentDescription = "Удалить")
                     }
 
-                    // Conditionally display color palette
                     if (widgetData.type != WidgetType.TEXT && widgetData.type != WidgetType.CLOCK) {
                         Row(
                             modifier = Modifier
@@ -372,5 +373,36 @@ fun WidgetDisplayItem(
                 }
             }
         }
+    }
+
+    if (showWeatherSettingsDialog && widgetData.type == WidgetType.WEATHER) {
+        WeatherSettingsDialog(
+            initialAutoLocate = widgetData.autoLocate,
+            initialManualCity = widgetData.manualCityName,
+            initialTextColorInt = widgetData.textColor,
+            initialBackgroundColorInt = widgetData.backgroundColor,
+            onDismissRequest = { showWeatherSettingsDialog = false },
+            onSaveSettings = { newAutoLocate, newManualCity, newTextColorInt, newBackgroundColorInt ->
+                val cityOrModeChanged = (widgetData.autoLocate != newAutoLocate) ||
+                                        (!newAutoLocate && widgetData.manualCityName != newManualCity?.ifBlank { null })
+
+                val updatedWidget = widgetData.copy(
+                    autoLocate = newAutoLocate,
+                    manualCityName = if (newAutoLocate) null else newManualCity?.ifBlank { null },
+                    cityName = if (newAutoLocate) {
+                        if (widgetData.autoLocate && !cityOrModeChanged) widgetData.cityName else null
+                    } else {
+                        newManualCity?.ifBlank { null }
+                    },
+                    textColor = newTextColorInt,
+                    backgroundColor = newBackgroundColorInt,
+                    temperature = if (cityOrModeChanged) null else widgetData.temperature,
+                    weatherDescription = if (cityOrModeChanged) null else widgetData.weatherDescription,
+                    weatherIconUrl = if (cityOrModeChanged) null else widgetData.weatherIconUrl
+                )
+                onUpdate(updatedWidget)
+                showWeatherSettingsDialog = false
+            }
+        )
     }
 }

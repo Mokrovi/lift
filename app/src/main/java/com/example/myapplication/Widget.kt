@@ -30,8 +30,9 @@ data class WidgetData(
     var zIndex: Int = 0,
     var textData: String? = null,
     var fontFamily: String? = null,
-    var lineHeightScale: Float? = null, // <--- НОВОЕ ПОЛЕ
-    var letterSpacingSp: Float? = null, // <--- НОВОЕ ПОЛЕ
+    var lineHeightScale: Float? = null,
+    var letterSpacingSp: Float? = null,
+    var fontWeight: Int? = null, // <--- НОВОЕ ПОЛЕ ДЛЯ ЖИРНОСТИ
     // Weather-specific data
     var cityName: String? = null,
     var temperature: Double? = null,

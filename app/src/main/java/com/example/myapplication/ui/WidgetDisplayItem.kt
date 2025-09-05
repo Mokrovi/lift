@@ -222,7 +222,7 @@ fun WidgetDisplayItem(
                     }
                     WidgetType.TEXT -> {
                         EditableTextWidget(
-                            initialWidgetData = widgetData,
+                            widgetData = widgetData, // Исправлено здесь
                             onWidgetDataChange = onUpdate, // Передаем существующий onUpdate
                             modifier = Modifier.fillMaxSize() // Чтобы занимал все доступное место в Card
                         )

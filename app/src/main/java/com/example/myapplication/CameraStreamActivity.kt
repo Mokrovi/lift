@@ -31,8 +31,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView // Or StyledPlayerView
+import androidx.media3.exoplayer.rtsp.RtspMediaSource
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.ui.PlayerView
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,6 +43,7 @@ import java.util.Locale
 // Replace with your actual stream URL from VLC
 private const val STREAM_URL = "YOUR_STREAM_URL_HERE" // e.g., "rtsp://192.168.1.10:8554/stream"
 private const val MAX_LOG_LINES = 100 // Maximum number of log lines to keep in the on-screen display
+private const val ACTION_CLOSE_CAMERA = "com.example.myapplication.ACTION_CLOSE_CAMERA_STREAM"
 
 class CameraStreamActivity : ComponentActivity() {
 
@@ -48,9 +52,8 @@ class CameraStreamActivity : ComponentActivity() {
     private fun logMessage(tag: String, message: String) {
         val timestamp = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
         val formattedMessage = "[$timestamp] $tag: $message"
-        Log.d(tag, message) // Still log to Logcat
+        Log.d(tag, message)
         
-        // Add to on-screen log display
         if (logMessages.size >= MAX_LOG_LINES) {
             logMessages.removeAt(0)
         }
@@ -61,23 +64,24 @@ class CameraStreamActivity : ComponentActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_CLOSE_CAMERA_STREAM) {
                 logMessage("CameraStreamActivity", "Received close broadcast. Finishing activity.")
-                finish() // Close the activity, which will trigger onDestroy
+                finish()
             }
         }
     }
 
+    @UnstableApi
+    @OptIn(UnstableApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val intentFilter = IntentFilter(ACTION_CLOSE_CAMERA_STREAM) 
+        val intentFilter = IntentFilter(ACTION_CLOSE_CAMERA_STREAM)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(closeReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
         } else {
-            // For older versions, no need for the flag, or handle as per your app'''s requirements
              registerReceiver(closeReceiver, intentFilter)
         }
-        NetworkSignalService.isStreamActivityRunning = true 
+        // NetworkSignalService.isStreamActivityRunning = true // Ensure this is commented if not defined
         logMessage("CameraStreamActivity", "Activity created and stream status set to true.")
 
         setContent {
@@ -95,7 +99,7 @@ class CameraStreamActivity : ComponentActivity() {
                             logMessages = logMessages,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f) // Takes remaining vertical space
+                                .weight(1f)
                         )
                     }
                 }
@@ -107,20 +111,42 @@ class CameraStreamActivity : ComponentActivity() {
         super.onDestroy()
         unregisterReceiver(closeReceiver)
         logMessage("CameraStreamActivity", "Activity destroyed, updating stream status.")
-        NetworkSignalService.isStreamActivityRunning = false 
+        // NetworkSignalService.isStreamActivityRunning = false // Ensure this is commented if not defined
     }
 }
 
+@UnstableApi
+@OptIn(UnstableApi::class)
 @Composable
 fun CameraStreamPlayer(streamUrl: String) {
     val context = LocalContext.current
+    @OptIn(UnstableApi::class)
     val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            val mediaItem = MediaItem.fromUri(streamUrl)
-            setMediaItem(mediaItem)
-            prepare()
-            playWhenReady = true // Start playback automatically
+        val trackSelector = DefaultTrackSelector(context).apply {
+            setParameters(buildUponParameters().setMaxVideoSizeSd())
         }
+
+        val mediaItem = MediaItem.Builder()
+            .setUri(streamUrl)
+            .setLiveConfiguration(
+                MediaItem.LiveConfiguration.Builder()
+                    .setMaxPlaybackSpeed(1.02f)
+                    .build()
+            )
+            .build()
+
+        val mediaSource = RtspMediaSource.Factory()
+            .setTimeoutMs(10000L) // Timeout for the RTSP session
+            .createMediaSource(mediaItem)
+
+        ExoPlayer.Builder(context)
+            .setTrackSelector(trackSelector)
+            .build()
+            .apply {
+                setMediaSource(mediaSource)
+                prepare()
+                playWhenReady = true
+            }
     }
 
     DisposableEffect(Unit) {
@@ -129,10 +155,10 @@ fun CameraStreamPlayer(streamUrl: String) {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) { // Changed to fillMaxSize to fill the allocated Box space
+    Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
             factory = { ctx ->
-                PlayerView(ctx).apply { // Or StyledPlayerView(ctx)
+                PlayerView(ctx).apply {
                     player = exoPlayer
                 }
             },
@@ -161,7 +187,6 @@ fun DefaultPreview() {
                     .fillMaxWidth()
                     .aspectRatio(16 / 9f)
             ) {
-                // Placeholder for CameraStreamPlayer in preview
                 Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxSize()){
                     Text("Camera Stream Area", modifier = Modifier.padding(16.dp))
                 }

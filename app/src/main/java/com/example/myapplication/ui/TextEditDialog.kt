@@ -17,9 +17,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState // Added import for scroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll // Added import for scroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -28,7 +28,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField // Added import for TextField
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity // Added import for Sp to Dp conversion
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -51,13 +52,26 @@ import androidx.compose.ui.unit.sp
 import com.example.myapplication.HorizontalAlignmentMode
 import com.example.myapplication.WidgetData
 import kotlin.math.roundToInt
+import java.text.DecimalFormat // For formatting float values in Text
+
+// Helper function to get FontFamily from string
+@Composable
+fun getPlatformFontFamily(fontFamilyName: String?): FontFamily {
+    return when (fontFamilyName) {
+        "Serif" -> FontFamily.Serif
+        "SansSerif" -> FontFamily.SansSerif
+        "Monospace" -> FontFamily.Monospace
+        "Cursive" -> FontFamily.Cursive
+        else -> FontFamily.Default
+    }
+}
 
 @Composable
 fun TextEditDialog(
     showDialog: Boolean,
     widgetData: WidgetData,
     onDismissRequest: () -> Unit,
-    onSave: (newTextData: String, newBackgroundColor: Int?, newTextColor: Int?, newTextSize: Int?, newIsVertical: Boolean, newHorizontalAlignment: HorizontalAlignmentMode) -> Unit
+    onSave: (newTextData: String, newBackgroundColor: Int?, newTextColor: Int?, newTextSize: Int?, newIsVertical: Boolean, newHorizontalAlignment: HorizontalAlignmentMode, newFontFamily: String?, newLineHeightScale: Float?, newLetterSpacingSp: Float?) -> Unit
 ) {
     if (showDialog) {
         var tempTextData by remember(widgetData.id, widgetData.textData) { mutableStateOf(widgetData.textData ?: "") }
@@ -66,23 +80,49 @@ fun TextEditDialog(
         var tempTextSize by remember(widgetData.id, widgetData.textSize) { mutableStateOf((widgetData.textSize ?: 16).toFloat()) }
         var tempIsVertical by remember(widgetData.id, widgetData.isVertical) { mutableStateOf(widgetData.isVertical) }
         var tempHorizontalAlignment by remember(widgetData.id, widgetData.horizontalAlignment) { mutableStateOf(widgetData.horizontalAlignment) }
+        var tempFontFamily by remember(widgetData.id, widgetData.fontFamily) { mutableStateOf(widgetData.fontFamily ?: "Default") }
+        var tempLineHeightScale by remember(widgetData.id, widgetData.lineHeightScale) { mutableStateOf(widgetData.lineHeightScale ?: 1.0f) }
+        var tempLetterSpacingSp by remember(widgetData.id, widgetData.letterSpacingSp) { mutableStateOf(widgetData.letterSpacingSp ?: 0.0f) }
+
+        val floatFormatter = remember { DecimalFormat("#.0") }
 
         val availableColorInts = listOf(
             Color.White.toArgb(), Color.LightGray.toArgb(), Color.Gray.toArgb(), Color.DarkGray.toArgb(), Color.Black.toArgb(),
             Color.Red.toArgb(), Color.Green.toArgb(), Color.Blue.toArgb(), Color.Yellow.toArgb(), Color.Cyan.toArgb(), Color.Magenta.toArgb(), Color.Transparent.toArgb()
         )
+        val availableFontFamilies = listOf("Default", "Serif", "SansSerif", "Monospace", "Cursive")
 
         AlertDialog(
             onDismissRequest = onDismissRequest,
             title = { Text("Edit Text Properties") },
             text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) { // Added scroll for potentially long content
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     TextField(
                         value = tempTextData,
                         onValueChange = { tempTextData = it },
                         label = { Text("Widget Text") },
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text("Font Family:", fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        items(availableFontFamilies) { fontFamilyName ->
+                            OutlinedButton(
+                                onClick = { tempFontFamily = fontFamilyName },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (tempFontFamily == fontFamilyName) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+                                )
+                            ) {
+                                Text(fontFamilyName, style = TextStyle(fontFamily = getPlatformFontFamily(fontFamilyName)))
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text("Background Color:", fontSize = 16.sp)
@@ -147,7 +187,7 @@ fun TextEditDialog(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text("Horizontal Alignment:", fontSize = 16.sp)
-                    Row(
+                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
@@ -170,7 +210,25 @@ fun TextEditDialog(
                         value = tempTextSize,
                         onValueChange = { tempTextSize = it },
                         valueRange = 8f..100f,
-                        steps = (100-8) -1 // Ensure steps is an Int for discrete steps
+                        steps = (100 - 8) - 1
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text("Line Height Scale: ${floatFormatter.format(tempLineHeightScale)}x", fontSize = 16.sp)
+                    Slider(
+                        value = tempLineHeightScale,
+                        onValueChange = { tempLineHeightScale = it },
+                        valueRange = 0.5f..3.0f,
+                        steps = 24 // (3.0 - 0.5) / 0.1 = 25 steps - 1
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text("Letter Spacing: ${floatFormatter.format(tempLetterSpacingSp)}sp", fontSize = 16.sp)
+                    Slider(
+                        value = tempLetterSpacingSp,
+                        onValueChange = { tempLetterSpacingSp = it },
+                        valueRange = -2.0f..10.0f,
+                        steps = 119 // (10 - (-2)) / 0.1 = 120 steps - 1
                     )
                 }
             },
@@ -182,7 +240,10 @@ fun TextEditDialog(
                         tempTextColor,
                         tempTextSize.roundToInt(),
                         tempIsVertical,
-                        tempHorizontalAlignment
+                        tempHorizontalAlignment,
+                        if (tempFontFamily == "Default") null else tempFontFamily,
+                        if (tempLineHeightScale == 1.0f) null else tempLineHeightScale,
+                        if (tempLetterSpacingSp == 0.0f) null else tempLetterSpacingSp
                     )
                     onDismissRequest()
                 }) {
@@ -204,31 +265,39 @@ fun VerticalStretchedText(
     text: String,
     textSize: Int,
     color: Color = Color.Black,
-    fontFamily: FontFamily = FontFamily.Default,
+    fontFamilyName: String? = null,
     fontWeight: FontWeight = FontWeight.Normal,
-    fontStyle: FontStyle = FontStyle.Normal
+    fontStyle: FontStyle = FontStyle.Normal,
+    lineHeightScale: Float? = null
 ) {
+    val currentFontFamily = getPlatformFontFamily(fontFamilyName)
+    val effectiveLineHeight = textSize.sp * (lineHeightScale ?: 1.0f)
+
     Column(modifier = modifier) {
         if (text.isNotEmpty()) {
-            Spacer(modifier = Modifier.weight(1f))
-            text.forEach { char ->
+            text.forEachIndexed { index, char ->
                 Text(
                     text = char.toString(),
                     modifier = Modifier
-                        .weight(1f)
                         .fillMaxWidth(),
                     style = TextStyle(
                         color = color,
                         fontSize = textSize.sp,
-                        fontFamily = fontFamily,
+                        fontFamily = currentFontFamily,
                         fontWeight = fontWeight,
                         fontStyle = fontStyle,
                         textAlign = TextAlign.Center
                     ),
+                    lineHeight = effectiveLineHeight,
                     overflow = TextOverflow.Visible,
                     softWrap = false
                 )
-                Spacer(modifier = Modifier.weight(1f))
+                if (index < text.length - 1 && (lineHeightScale ?: 1.0f) > 1.0f) {
+                    val rawSpacerValue = (((lineHeightScale ?: 1.0f) - 1.0f) * textSize * 0.5f)
+                    val spacerHeightInSp = rawSpacerValue.sp
+                    val spacerHeightInDp = with(LocalDensity.current) { spacerHeightInSp.toDp() } // Convert Sp to Dp
+                    Spacer(modifier = Modifier.height(spacerHeightInDp))
+                }
             }
         }
     }
@@ -266,25 +335,31 @@ fun EditableTextWidget(
             )
             .background(widgetDataState.backgroundColor?.let { Color(it) } ?: Color.Transparent)
             .padding(8.dp)
+            .fillMaxSize(),
+        contentAlignment = if (widgetDataState.isVertical) Alignment.Center else contentAlignment
     ) {
         if (widgetDataState.isVertical) {
             VerticalStretchedText(
-                modifier = Modifier.fillMaxSize().align(Alignment.Center),
+                modifier = Modifier.fillMaxSize(),
                 text = widgetDataState.textData ?: "",
                 textSize = widgetDataState.textSize ?: 16,
-                color = widgetDataState.textColor?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface
+                color = widgetDataState.textColor?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface,
+                fontFamilyName = widgetDataState.fontFamily,
+                lineHeightScale = widgetDataState.lineHeightScale
             )
         } else {
             Text(
                 text = widgetDataState.textData ?: "",
                 fontSize = (widgetDataState.textSize ?: 16).sp,
                 color = widgetDataState.textColor?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface,
+                fontFamily = getPlatformFontFamily(widgetDataState.fontFamily),
                 textAlign = when (widgetDataState.horizontalAlignment) {
                     HorizontalAlignmentMode.LEFT -> TextAlign.Start
                     HorizontalAlignmentMode.CENTER -> TextAlign.Center
                     HorizontalAlignmentMode.RIGHT -> TextAlign.End
                 },
-                modifier = Modifier.align(contentAlignment)
+                lineHeight = (widgetDataState.textSize ?: 16).sp * (widgetDataState.lineHeightScale ?: 1.0f),
+                letterSpacing = (widgetDataState.letterSpacingSp ?: 0.0f).sp
             )
         }
     }
@@ -294,14 +369,17 @@ fun EditableTextWidget(
             showDialog = true,
             widgetData = widgetDataState,
             onDismissRequest = { showEditDialog = false },
-            onSave = { newTextData, newBackgroundColor, newTextColor, newTextSize, newIsVertical, newHorizontalAlignment ->
+            onSave = { newTextData, newBackgroundColor, newTextColor, newTextSize, newIsVertical, newHorizontalAlignment, newFontFamily, newLineHeightScale, newLetterSpacingSp ->
                 val updatedWidgetData = widgetDataState.copy(
-                    textData = newTextData, // Added textData update
+                    textData = newTextData,
                     backgroundColor = newBackgroundColor,
                     textColor = newTextColor,
                     textSize = newTextSize,
                     isVertical = newIsVertical,
-                    horizontalAlignment = newHorizontalAlignment
+                    horizontalAlignment = newHorizontalAlignment,
+                    fontFamily = newFontFamily,
+                    lineHeightScale = newLineHeightScale,
+                    letterSpacingSp = newLetterSpacingSp
                 )
                 widgetDataState = updatedWidgetData
                 onWidgetDataChange(updatedWidgetData)

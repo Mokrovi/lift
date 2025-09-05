@@ -29,6 +29,9 @@ data class WidgetData(
     var horizontalAlignment: HorizontalAlignmentMode = HorizontalAlignmentMode.LEFT,
     var zIndex: Int = 0,
     var textData: String? = null,
+    var fontFamily: String? = null,
+    var lineHeightScale: Float? = null, // <--- НОВОЕ ПОЛЕ
+    var letterSpacingSp: Float? = null, // <--- НОВОЕ ПОЛЕ
     // Weather-specific data
     var cityName: String? = null,
     var temperature: Double? = null,

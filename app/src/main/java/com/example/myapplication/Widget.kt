@@ -2,15 +2,15 @@ package com.example.myapplication
 
 import android.net.Uri
 
-enum class WidgetType {
-    WEATHER,
-    CLOCK,
-    CAMERA,
-    AD,
-    TEXT,
-    GIF,
-    VIDEO,
-    ONVIF_CAMERA // Новый тип для ONVIF камеры
+enum class WidgetType(val displayName: String) {
+    WEATHER("Виджет Погоды"),
+    CLOCK("Виджет Часов"),
+    CAMERA("Виджет Камеры"),
+    AD("Рекламный виджет"),
+    TEXT("Текстовый виджет"),
+    GIF("GIF виджет"),
+    VIDEO("Видео виджет"),
+    ONVIF_CAMERA("ONVIF Камера") // Новый тип для ONVIF камеры
 }
 
 data class WidgetData(
@@ -21,7 +21,7 @@ data class WidgetData(
     var width: Int,
     var height: Int,
     var cornerRadius: Int = 12,
-    var mediaUri: Uri? = null,
+    var mediaUri: Uri? = null, // Kept as Uri? based on current file content, potential follow-up if WidgetManager expects String?
     var backgroundColor: Int? = null, // Will be used for weather widget background
     var textColor: Int? = null,       // Will be used for weather widget text color
     var textSize: Int? = null,

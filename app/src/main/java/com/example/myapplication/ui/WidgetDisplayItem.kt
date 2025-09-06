@@ -10,10 +10,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState // Added import
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll // Added import
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
@@ -67,7 +67,8 @@ fun WidgetDisplayItem(
     isEditMode: Boolean,
     onUpdate: (WidgetData) -> Unit,
     onDeleteRequest: (WidgetData) -> Unit,
-    checkCollision: (WidgetData, Float, Float, Float, Float, Boolean) -> Boolean
+    checkCollision: (WidgetData, Float, Float, Float, Float, Boolean) -> Boolean,
+    onWidgetDoubleClick: () -> Unit // <-- NEW PARAMETER
 ) {
     val initialWidth = remember(widgetData.width) { widgetData.width.toFloat().toSafeDp(minSize = 48.dp) }
     val initialHeight = remember(widgetData.height) { widgetData.height.toFloat().toSafeDp(minSize = 48.dp) }
@@ -153,17 +154,20 @@ fun WidgetDisplayItem(
         Card(
             modifier = Modifier
                 .fillMaxSize()
-                .combinedClickable( // Handles long press for specific dialogs
+                .combinedClickable( 
                     onClick = { /* No action on single click on the card itself */ },
                     onLongClick = {
                         if (isEditMode) {
                             when (widgetData.type) {
                                 WidgetType.CLOCK -> showClockStyleDialog = true
                                 WidgetType.WEATHER -> showWeatherSettingsDialog = true
-                                WidgetType.TEXT -> showClockStyleDialog = true // Using TextEditDialog (via showClockStyleDialog flag) for Text
-                                else -> showEditPropertiesDialog = true // General properties for other types
+                                WidgetType.TEXT -> showClockStyleDialog = true 
+                                else -> showEditPropertiesDialog = true 
                             }
                         }
+                    },
+                    onDoubleClick = { // <-- ADDED HANDLER
+                        onWidgetDoubleClick()
                     }
                 ),
             shape = RoundedCornerShape(widgetData.cornerRadius.dp),
@@ -189,7 +193,7 @@ fun WidgetDisplayItem(
                         textColor = widgetData.textColor?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface,
                         backgroundColor = widgetData.backgroundColor?.let { Color(it) } ?: Color.Transparent,
                         isEditMode = isEditMode,
-                        onLongPress = { // This is now the primary way to open weather settings
+                        onLongPress = { 
                             if (isEditMode) {
                                 showWeatherSettingsDialog = true
                             }
@@ -342,14 +346,14 @@ fun WidgetDisplayItem(
             showDialog = showEditPropertiesDialog,
             widgetData = widgetData,
             colorPalette = colorPalette,
-            isTextColorRelevant = false, // <-- MODIFIED: False for general properties dialog
+            isTextColorRelevant = false, 
             onDismissRequest = { showEditPropertiesDialog = false },
             onSave = { newWidth, newHeight, newBackgroundColor, newTextColor ->
                 val updatedWidget = widgetData.copy(
                     width = newWidth,
                     height = newHeight,
                     backgroundColor = newBackgroundColor,
-                    textColor = newTextColor // This will be the original textColor due to isTextColorRelevant=false
+                    textColor = newTextColor 
                 )
                 onUpdate(updatedWidget)
                 currentWidth = newWidth.toFloat().toSafeDp(minSize = 48.dp)
@@ -433,7 +437,7 @@ fun WidgetPropertiesDialog(
     showDialog: Boolean,
     widgetData: WidgetData,
     colorPalette: List<Color>,
-    isTextColorRelevant: Boolean, // <-- ADDED parameter
+    isTextColorRelevant: Boolean, 
     onDismissRequest: () -> Unit,
     onSave: (newWidth: Int, newHeight: Int, newBackgroundColor: Int?, newTextColor: Int?) -> Unit
 ) {
@@ -441,7 +445,6 @@ fun WidgetPropertiesDialog(
         var currentWidthInput by remember { mutableStateOf(widgetData.width.toString()) }
         var currentHeightInput by remember { mutableStateOf(widgetData.height.toString()) }
         var selectedBackgroundColor by remember { mutableStateOf(widgetData.backgroundColor?.let { Color(it) }) }
-        // selectedTextColor only relevant if isTextColorRelevant is true
         var selectedTextColor by remember(widgetData.id, widgetData.textColor, isTextColorRelevant) { 
             mutableStateOf(if(isTextColorRelevant) widgetData.textColor?.let { Color(it) } else null) 
         }
@@ -450,7 +453,7 @@ fun WidgetPropertiesDialog(
             onDismissRequest = onDismissRequest,
             title = { Text("Edit Widget Properties") },
             text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) { // Added scroll for potentially long dialog
+                Column(Modifier.verticalScroll(rememberScrollState())) { 
                     TextField(
                         value = currentWidthInput,
                         onValueChange = { currentWidthInput = it.filter { char -> char.isDigit() } },
@@ -488,7 +491,7 @@ fun WidgetPropertiesDialog(
                         Text("Clear Background Color")
                     }
                     
-                    if (isTextColorRelevant) { // <-- MODIFIED: Conditional rendering
+                    if (isTextColorRelevant) { 
                         Spacer(modifier = Modifier.height(16.dp))
                         Text("Text Color:")
                         Row(
@@ -519,10 +522,10 @@ fun WidgetPropertiesDialog(
                 Button(onClick = {
                     val newWidth = currentWidthInput.toIntOrNull() ?: widgetData.width
                     val newHeight = currentHeightInput.toIntOrNull() ?: widgetData.height
-                    val textColorToSave = if (isTextColorRelevant) { // <-- MODIFIED: Conditional text color saving
+                    val textColorToSave = if (isTextColorRelevant) { 
                         selectedTextColor?.toArgb()
                     } else {
-                        widgetData.textColor // Preserve original if not relevant
+                        widgetData.textColor 
                     }
                     onSave(newWidth, newHeight, selectedBackgroundColor?.toArgb(), textColorToSave)
                     onDismissRequest()

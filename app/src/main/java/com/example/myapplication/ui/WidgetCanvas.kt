@@ -15,7 +15,8 @@ fun WidgetCanvas(
     isEditMode: Boolean,
     modifier: Modifier = Modifier,
     onUpdate: (WidgetData) -> Unit,
-    checkCollision: (WidgetData, Float, Float, Float, Float, Boolean) -> Boolean
+    checkCollision: (WidgetData, Float, Float, Float, Float, Boolean) -> Boolean,
+    onCanvasDoubleClick: () -> Unit // <-- NEW PARAMETER
 ) {
     val widgets: List<WidgetData> by widgetManager.widgets.collectAsState(initial = emptyList())
 
@@ -38,7 +39,8 @@ fun WidgetCanvas(
                         newWidth = newWidth,
                         newHeight = newHeight
                     )
-                }
+                },
+                onWidgetDoubleClick = onCanvasDoubleClick // <-- PASSING THE CALLBACK HERE
             )
         }
     }

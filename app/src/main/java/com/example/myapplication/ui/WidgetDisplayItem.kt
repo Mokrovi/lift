@@ -5,12 +5,15 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState // Added import
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll // Added import
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
@@ -46,6 +49,8 @@ import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.max
 import kotlin.math.roundToInt
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 
 fun Float.toSafeDp(minSize: Dp = 1.dp): Dp {
     return if (this.isNaN() || this <= 0f) {
@@ -60,8 +65,8 @@ fun Float.toSafeDp(minSize: Dp = 1.dp): Dp {
 fun WidgetDisplayItem(
     widgetData: WidgetData,
     isEditMode: Boolean,
-    onUpdate: (WidgetData) -> Unit, 
-    onDeleteRequest: (WidgetData) -> Unit, 
+    onUpdate: (WidgetData) -> Unit,
+    onDeleteRequest: (WidgetData) -> Unit,
     checkCollision: (WidgetData, Float, Float, Float, Float, Boolean) -> Boolean
 ) {
     val initialWidth = remember(widgetData.width) { widgetData.width.toFloat().toSafeDp(minSize = 48.dp) }
@@ -83,7 +88,7 @@ fun WidgetDisplayItem(
     val colorPalette = remember {
         listOf(
             Color.White, Color(0xFFF0F0F0), Color.LightGray, Color.Gray, Color.DarkGray, Color.Black,
-            Color(0xFFFFCDD2), Color(0xFFC8E6C9), Color(0xFFBBDEFB), 
+            Color(0xFFFFCDD2), Color(0xFFC8E6C9), Color(0xFFBBDEFB),
             Color(0xFFFFF9C4), Color(0xFFB2EBF2), Color(0xFFE1BEE7)
         )
     }
@@ -95,8 +100,9 @@ fun WidgetDisplayItem(
     }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
-    var showClockStyleDialog by remember(widgetData.id) { mutableStateOf(false) } // For clock style editing
-    var showWeatherSettingsDialog by remember(widgetData.id) { mutableStateOf(false) } // For weather settings
+    var showClockStyleDialog by remember(widgetData.id) { mutableStateOf(false) } // Used for Clock and Text
+    var showWeatherSettingsDialog by remember(widgetData.id) { mutableStateOf(false) }
+    var showEditPropertiesDialog by remember(widgetData.id) { mutableStateOf(false) } // General properties
 
     if (showDeleteDialog) {
         AlertDialog(
@@ -117,15 +123,15 @@ fun WidgetDisplayItem(
 
     Box(
         modifier = Modifier
-            .offset(fun Density.(): IntOffset { return currentPosition })
+            .offset { currentPosition } 
             .size(currentWidth, currentHeight)
             .clip(RoundedCornerShape(widgetData.cornerRadius.dp))
-            .pointerInput(isEditMode, widgetData) {
+            .pointerInput(isEditMode, widgetData) { // For dragging the widget
                 if (isEditMode) {
                     detectDragGestures(
-                        onDragStart = { offset -> dragStartOffset = Offset(currentPosition.x.toFloat(), currentPosition.y.toFloat()) },
+                        onDragStart = { dragStartOffset = Offset(currentPosition.x.toFloat(), currentPosition.y.toFloat()) },
                         onDragEnd = {
-                            isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), currentWidth.value, currentHeight.value, true)
+                            isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), currentWidth.value, currentHeight.value, false) 
                             if (isColliding) {
                                 currentPosition = IntOffset(dragStartOffset.x.roundToInt(), dragStartOffset.y.roundToInt())
                             } else {
@@ -137,39 +143,57 @@ fun WidgetDisplayItem(
                             change.consume()
                             val newX = currentPosition.x + dragAmount.x
                             val newY = currentPosition.y + dragAmount.y
-                            isColliding = checkCollision(widgetData, newX, newY, currentWidth.value, currentHeight.value, true)
                             currentPosition = IntOffset(newX.roundToInt(), newY.roundToInt())
+                            isColliding = checkCollision(widgetData, newX, newY, currentWidth.value, currentHeight.value, false) 
                         }
                     )
                 }
             }
     ) {
         Card(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .combinedClickable( // Handles long press for specific dialogs
+                    onClick = { /* No action on single click on the card itself */ },
+                    onLongClick = {
+                        if (isEditMode) {
+                            when (widgetData.type) {
+                                WidgetType.CLOCK -> showClockStyleDialog = true
+                                WidgetType.WEATHER -> showWeatherSettingsDialog = true
+                                WidgetType.TEXT -> showClockStyleDialog = true // Using TextEditDialog (via showClockStyleDialog flag) for Text
+                                else -> showEditPropertiesDialog = true // General properties for other types
+                            }
+                        }
+                    }
+                ),
             shape = RoundedCornerShape(widgetData.cornerRadius.dp),
             colors = CardDefaults.cardColors(
-                containerColor = widgetData.backgroundColor?.let { Color(it) } 
+                containerColor = widgetData.backgroundColor?.let { Color(it) }
                     ?: if ((widgetData.type == WidgetType.CAMERA || widgetData.type == WidgetType.GIF || widgetData.type == WidgetType.VIDEO || widgetData.type == WidgetType.ONVIF_CAMERA) && widgetData.mediaUri == null) Color.Gray
                     else MaterialTheme.colorScheme.surfaceVariant
             ),
             border = if (isColliding) {
                 BorderStroke(collidingBorderWidth, Color.Red)
-            } else {
-                BorderStroke(normalBorderWidth, MaterialTheme.colorScheme.outline)
-            }
+            } else null
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(8.dp), 
-                contentAlignment = Alignment.Center 
+                    .padding(8.dp),
+                contentAlignment = Alignment.Center
             ) {
                 when (widgetData.type) {
                     WidgetType.WEATHER -> WeatherWidgetCard(
                         widget = widgetData,
-                        onWeatherSettingsClick = { showWeatherSettingsDialog = true },
+                        onWeatherSettingsClick = { /* Kept for potential future use, primary is long press */ }, 
                         textColor = widgetData.textColor?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface,
-                        backgroundColor = widgetData.backgroundColor?.let { Color(it) } ?: Color.Transparent
+                        backgroundColor = widgetData.backgroundColor?.let { Color(it) } ?: Color.Transparent,
+                        isEditMode = isEditMode,
+                        onLongPress = { // This is now the primary way to open weather settings
+                            if (isEditMode) {
+                                showWeatherSettingsDialog = true
+                            }
+                        }
                     )
                     WidgetType.CLOCK -> {
                         var currentTime by remember { mutableStateOf("") }
@@ -180,49 +204,12 @@ fun WidgetDisplayItem(
                                 delay(1000L)
                             }
                         }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .combinedClickable(
-                                    onClick = { /* Single click for clock if needed */ },
-                                    onDoubleClick = {
-                                        if (isEditMode) {
-                                            showClockStyleDialog = true
-                                        }
-                                    }
-                                ),
-                        ) {
-                            ReusableTextDisplayView(
-                                text = currentTime,
-                                styleData = widgetData,
-                                modifier = Modifier.fillMaxSize(),
-                                defaultFontSizeIfNotSet = (currentHeight.value / 3).sp
-                            )
-                        }
-
-                        if (showClockStyleDialog) {
-                            TextEditDialog(
-                                showDialog = true,
-                                widgetData = widgetData,
-                                onDismissRequest = { showClockStyleDialog = false },
-                                onSave = { _, newBackgroundColor, newTextColor, newTextSize, newIsVertical, newHorizontalAlignment, newFontFamily, newLineHeightScale, newLetterSpacingSp, newFontWeight ->
-                                    val updatedWidgetData = widgetData.copy(
-                                        backgroundColor = newBackgroundColor,
-                                        textColor = newTextColor,
-                                        textSize = newTextSize,
-                                        isVertical = newIsVertical,
-                                        horizontalAlignment = newHorizontalAlignment,
-                                        fontFamily = newFontFamily,
-                                        lineHeightScale = newLineHeightScale,
-                                        letterSpacingSp = newLetterSpacingSp,
-                                        fontWeight = newFontWeight
-                                    )
-                                    onUpdate(updatedWidgetData)
-                                    showClockStyleDialog = false
-                                },
-                                isTextContentEditable = false 
-                            )
-                        }
+                        ReusableTextDisplayView(
+                            text = currentTime,
+                            styleData = widgetData,
+                            modifier = Modifier.fillMaxSize(),
+                            defaultFontSizeIfNotSet = (currentHeight.value / 3).sp
+                        )
                     }
                     WidgetType.CAMERA -> {
                         widgetData.mediaUri?.let {
@@ -253,7 +240,7 @@ fun WidgetDisplayItem(
                             val painter = rememberAsyncImagePainter(
                                 model = ImageRequest.Builder(context)
                                     .data(uri)
-                                    .size(imageWidthPx, imageHeightPx) 
+                                    .size(imageWidthPx, imageHeightPx)
                                     .precision(Precision.EXACT)
                                     .build()
                             )
@@ -267,9 +254,9 @@ fun WidgetDisplayItem(
                     }
                     WidgetType.TEXT -> {
                         EditableTextWidget(
-                            widgetData = widgetData, 
+                            widgetData = widgetData,
                             onWidgetDataChange = onUpdate, 
-                            modifier = Modifier.fillMaxSize() 
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                     WidgetType.GIF -> {
@@ -299,46 +286,21 @@ fun WidgetDisplayItem(
                         Icon(Icons.Filled.Delete, contentDescription = "Удалить")
                     }
 
-                    if (widgetData.type != WidgetType.TEXT && widgetData.type != WidgetType.CLOCK) {
-                        Row(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = 30.dp) 
-                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
-                                .padding(8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            colorPalette.forEach { colorItem ->
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .shadow(2.dp, CircleShape)
-                                        .background(colorItem, CircleShape)
-                                        .clip(CircleShape)
-                                        .clickable {
-                                            val updatedWidget = widgetData.copy(backgroundColor = colorItem.toArgb())
-                                            onUpdate(updatedWidget)
-                                        }
-                                )
-                            }
-                        }
-                    }
-
-                    Box(
-                        contentAlignment = Alignment.Center, 
+                    Box( // Resize handle
+                        contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .size(40.dp) 
-                            .clip(CircleShape) 
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) 
-                            .pointerInput(isEditMode, widgetData) {
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                            .pointerInput(isEditMode, widgetData) { // For resizing
                                 if (isEditMode) {
                                     detectDragGestures(
                                         onDragStart = { resizeStartSize = Pair(currentWidth, currentHeight) },
                                         onDragEnd = {
                                             val finalWidth = kotlin.math.max(currentWidth.value, 48f)
                                             val finalHeight = kotlin.math.max(currentHeight.value, 48f)
-                                            isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), finalWidth, finalHeight, true)
+                                            isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), finalWidth, finalHeight, true) 
                                             if (isColliding) {
                                                 currentWidth = resizeStartSize.first
                                                 currentHeight = resizeStartSize.second
@@ -355,24 +317,46 @@ fun WidgetDisplayItem(
                                             currentHeight = androidx.compose.ui.unit.max(newHeightDp, 48.dp)
                                             val tempWidth = kotlin.math.max(currentWidth.value, 48f)
                                             val tempHeight = kotlin.math.max(currentHeight.value, 48f)
-                                            isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), tempWidth, tempHeight, true)
+                                            isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), tempWidth, tempHeight, true) 
                                         }
                                     )
                                 }
                             }
                     ) {
                         Icon(
-                            Icons.Filled.Menu, 
+                            Icons.Filled.Menu,
                             contentDescription = "Изменить размер",
                             modifier = Modifier
                                 .size(24.dp)
-                                .rotate(-45f), 
-                            tint = MaterialTheme.colorScheme.onPrimary 
+                                .rotate(-45f),
+                            tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
                 }
             }
         }
+    }
+
+    if (showEditPropertiesDialog) { // General Properties Dialog
+        WidgetPropertiesDialog(
+            showDialog = showEditPropertiesDialog,
+            widgetData = widgetData,
+            colorPalette = colorPalette,
+            isTextColorRelevant = false, // <-- MODIFIED: False for general properties dialog
+            onDismissRequest = { showEditPropertiesDialog = false },
+            onSave = { newWidth, newHeight, newBackgroundColor, newTextColor ->
+                val updatedWidget = widgetData.copy(
+                    width = newWidth,
+                    height = newHeight,
+                    backgroundColor = newBackgroundColor,
+                    textColor = newTextColor // This will be the original textColor due to isTextColorRelevant=false
+                )
+                onUpdate(updatedWidget)
+                currentWidth = newWidth.toFloat().toSafeDp(minSize = 48.dp)
+                currentHeight = newHeight.toFloat().toSafeDp(minSize = 48.dp)
+                showEditPropertiesDialog = false
+            }
+        )
     }
 
     if (showWeatherSettingsDialog && widgetData.type == WidgetType.WEATHER) {
@@ -381,8 +365,10 @@ fun WidgetDisplayItem(
             initialManualCity = widgetData.manualCityName,
             initialTextColorInt = widgetData.textColor,
             initialBackgroundColorInt = widgetData.backgroundColor,
+            initialWidth = widgetData.width, 
+            initialHeight = widgetData.height, 
             onDismissRequest = { showWeatherSettingsDialog = false },
-            onSaveSettings = { newAutoLocate, newManualCity, newTextColorInt, newBackgroundColorInt ->
+            onSaveSettings = { newAutoLocate, newManualCity, newTextColorInt, newBackgroundColorInt, newWidth, newHeight ->
                 val cityOrModeChanged = (widgetData.autoLocate != newAutoLocate) ||
                                         (!newAutoLocate && widgetData.manualCityName != newManualCity?.ifBlank { null })
 
@@ -396,12 +382,158 @@ fun WidgetDisplayItem(
                     },
                     textColor = newTextColorInt,
                     backgroundColor = newBackgroundColorInt,
+                    width = newWidth, 
+                    height = newHeight, 
                     temperature = if (cityOrModeChanged) null else widgetData.temperature,
                     weatherDescription = if (cityOrModeChanged) null else widgetData.weatherDescription,
                     weatherIconUrl = if (cityOrModeChanged) null else widgetData.weatherIconUrl
                 )
                 onUpdate(updatedWidget)
+                currentWidth = newWidth.toFloat().toSafeDp(minSize = 48.dp)
+                currentHeight = newHeight.toFloat().toSafeDp(minSize = 48.dp)
                 showWeatherSettingsDialog = false
+            }
+        )
+    }
+
+    if (showClockStyleDialog && (widgetData.type == WidgetType.CLOCK || widgetData.type == WidgetType.TEXT)) { 
+        TextEditDialog(
+            showDialog = showClockStyleDialog, 
+            widgetData = widgetData,
+            initialWidth = widgetData.width, 
+            initialHeight = widgetData.height, 
+            onDismissRequest = { showClockStyleDialog = false },
+            onSave = { newText, newBackgroundColor, newTextColor, newTextSize, newIsVertical, newHorizontalAlignment, newFontFamily, newLineHeightScale, newLetterSpacingSp, newFontWeight, newWidth, newHeight -> 
+                val updatedWidget = widgetData.copy(
+                    textData = newText, 
+                    backgroundColor = newBackgroundColor,
+                    textColor = newTextColor,
+                    textSize = newTextSize,
+                    isVertical = newIsVertical,
+                    horizontalAlignment = newHorizontalAlignment,
+                    fontFamily = newFontFamily,
+                    lineHeightScale = newLineHeightScale,
+                    letterSpacingSp = newLetterSpacingSp,
+                    fontWeight = newFontWeight,
+                    width = newWidth, 
+                    height = newHeight 
+                )
+                onUpdate(updatedWidget)
+                currentWidth = newWidth.toFloat().toSafeDp(minSize = 48.dp)
+                currentHeight = newHeight.toFloat().toSafeDp(minSize = 48.dp)
+                showClockStyleDialog = false
+            },
+            isTextContentEditable = widgetData.type == WidgetType.TEXT 
+        )
+    }
+}
+
+@Composable
+fun WidgetPropertiesDialog( 
+    showDialog: Boolean,
+    widgetData: WidgetData,
+    colorPalette: List<Color>,
+    isTextColorRelevant: Boolean, // <-- ADDED parameter
+    onDismissRequest: () -> Unit,
+    onSave: (newWidth: Int, newHeight: Int, newBackgroundColor: Int?, newTextColor: Int?) -> Unit
+) {
+    if (showDialog) {
+        var currentWidthInput by remember { mutableStateOf(widgetData.width.toString()) }
+        var currentHeightInput by remember { mutableStateOf(widgetData.height.toString()) }
+        var selectedBackgroundColor by remember { mutableStateOf(widgetData.backgroundColor?.let { Color(it) }) }
+        // selectedTextColor only relevant if isTextColorRelevant is true
+        var selectedTextColor by remember(widgetData.id, widgetData.textColor, isTextColorRelevant) { 
+            mutableStateOf(if(isTextColorRelevant) widgetData.textColor?.let { Color(it) } else null) 
+        }
+
+        AlertDialog(
+            onDismissRequest = onDismissRequest,
+            title = { Text("Edit Widget Properties") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) { // Added scroll for potentially long dialog
+                    TextField(
+                        value = currentWidthInput,
+                        onValueChange = { currentWidthInput = it.filter { char -> char.isDigit() } },
+                        label = { Text("Width (dp)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextField(
+                        value = currentHeightInput,
+                        onValueChange = { currentHeightInput = it.filter { char -> char.isDigit() } },
+                        label = { Text("Height (dp)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Background Color:")
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        colorPalette.forEach { colorItem ->
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(colorItem, CircleShape)
+                                    .clip(CircleShape)
+                                    .clickable { selectedBackgroundColor = colorItem }
+                                    .border(
+                                        if (selectedBackgroundColor == colorItem) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else BorderStroke(0.dp, Color.Transparent),
+                                        CircleShape
+                                    )
+                            )
+                        }
+                    }
+                    Button(onClick = { selectedBackgroundColor = null }) {
+                        Text("Clear Background Color")
+                    }
+                    
+                    if (isTextColorRelevant) { // <-- MODIFIED: Conditional rendering
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Text Color:")
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            colorPalette.forEach { colorItem ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(colorItem, CircleShape)
+                                        .clip(CircleShape)
+                                        .clickable { selectedTextColor = colorItem }
+                                        .border(
+                                            if (selectedTextColor == colorItem) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else BorderStroke(0.dp, Color.Transparent),
+                                            CircleShape
+                                        )
+                                )
+                            }
+                        }
+                        Button(onClick = { selectedTextColor = null }) {
+                            Text("Clear Text Color")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val newWidth = currentWidthInput.toIntOrNull() ?: widgetData.width
+                    val newHeight = currentHeightInput.toIntOrNull() ?: widgetData.height
+                    val textColorToSave = if (isTextColorRelevant) { // <-- MODIFIED: Conditional text color saving
+                        selectedTextColor?.toArgb()
+                    } else {
+                        widgetData.textColor // Preserve original if not relevant
+                    }
+                    onSave(newWidth, newHeight, selectedBackgroundColor?.toArgb(), textColorToSave)
+                    onDismissRequest()
+                }) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                Button(onClick = onDismissRequest) {
+                    Text("Cancel")
+                }
             }
         )
     }

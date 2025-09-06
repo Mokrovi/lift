@@ -26,9 +26,11 @@ import java.util.Locale // For formatting temperature
 @Composable
 fun WeatherWidgetCard(
     widget: WidgetData,
-    onWeatherSettingsClick: () -> Unit,
-    textColor: Color = MaterialTheme.colorScheme.onSurface, // Default text color
-    backgroundColor: Color = Color.Transparent // Default background color
+    onWeatherSettingsClick: () -> Unit, // This will now be triggered by onLongPress logic from WidgetDisplayItem
+    textColor: Color = MaterialTheme.colorScheme.onSurface, 
+    backgroundColor: Color = Color.Transparent, 
+    isEditMode: Boolean,      // Added isEditMode
+    onLongPress: () -> Unit   // Added onLongPress callback
 ) {
     val currentCityName = widget.cityName
     val currentTemperature = widget.temperature
@@ -37,12 +39,22 @@ fun WeatherWidgetCard(
 
     Column(
         modifier = Modifier
-            .width(widget.width.dp)
-            .height(widget.height.dp)
-            .background(backgroundColor) // Apply background color
-            .pointerInput(Unit) { // Add double tap gesture detection
+            // .width(widget.width.dp) // Width and height are controlled by parent Box in WidgetDisplayItem
+            // .height(widget.height.dp)
+            // .fillMaxSize() // строка .fillMaxSize() УДАЛЕНА
+            .background(backgroundColor) 
+            .pointerInput(isEditMode, onLongPress, onWeatherSettingsClick) { // Pass all relevant keys to pointerInput
                 detectTapGestures(
-                    onDoubleTap = { onWeatherSettingsClick() }
+                    // onDoubleTap = { 
+                    //     if (isEditMode) {
+                    //         onWeatherSettingsClick() // Keep double tap if you want, or remove
+                    //     }
+                    // },
+                    onLongPress = { offset -> // offset is a parameter of onLongPress lambda
+                        if (isEditMode) {
+                            onLongPress() // This now calls showWeatherSettingsDialog = true from WidgetDisplayItem
+                        }
+                    }
                 )
             },
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -52,7 +64,7 @@ fun WeatherWidgetCard(
             Text(
                 text = currentCityName,
                 style = MaterialTheme.typography.titleMedium,
-                color = textColor, // Apply text color
+                color = textColor, 
                 modifier = Modifier.padding(0.dp)
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -73,7 +85,7 @@ fun WeatherWidgetCard(
                     Text(
                         text = String.format(Locale.getDefault(), "%.1f°C", currentTemperature),
                         style = MaterialTheme.typography.headlineSmall,
-                        color = textColor, // Apply text color
+                        color = textColor, 
                         modifier = Modifier.padding(0.dp)
                     )
                 }
@@ -83,19 +95,19 @@ fun WeatherWidgetCard(
                         if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
                     },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = textColor, // Apply text color
+                    color = textColor, 
                     modifier = Modifier.padding(0.dp)
                 )
             } else {
                 CircularProgressIndicator(
                     modifier = Modifier.size(36.dp).padding(0.dp),
-                    color = textColor // Apply text color to indicator as well, or use a specific one
+                    color = textColor 
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "Loading weather...",
                     style = MaterialTheme.typography.bodySmall,
-                    color = textColor, // Apply text color
+                    color = textColor, 
                     modifier = Modifier.padding(0.dp)
                 )
             }
@@ -103,7 +115,7 @@ fun WeatherWidgetCard(
             Text(
                 "City not set",
                 style = MaterialTheme.typography.bodyMedium,
-                color = textColor, // Apply text color
+                color = textColor, 
                 modifier = Modifier.padding(0.dp)
             )
         }

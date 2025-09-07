@@ -33,7 +33,7 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
 
     fun addWidget(
         type: WidgetType,
-        mediaUri: String? = null,
+        mediaUri: Uri? = null, // CHANGED: String? to Uri?
         textData: String? = null
     ): Boolean {
         val currentWidgets = _widgets.value
@@ -52,19 +52,19 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
                 id = "temp_id_${UUID.randomUUID()}", type = type,
                 x = newX.toInt(), y = newY.toInt(),
                 width = widgetWidth.toInt(), height = widgetHeight.toInt(),
-                mediaUri = mediaUri?.let { Uri.parse(it) },
+                mediaUri = mediaUri, // CHANGED: No longer parsing, mediaUri is already Uri?
                 textData = if (type == WidgetType.TEXT) textData else null
             )
             if (checkCollisionInternal(potentialWidgetBounds, newX, newY, widgetWidth, widgetHeight, currentWidgets)) {
                 collision = true
                 newX += widgetWidth + 16f
-                if (newX + widgetWidth > 1000f) {
+                if (newX + widgetWidth > 1000f) { // Assuming a canvas width constraint
                     newX = 16f
                     newY += widgetHeight + 16f
                 }
             }
             attempts++
-            if (newY + widgetHeight > 2000f) return false
+            if (newY + widgetHeight > 2000f) return false // Assuming a canvas height constraint
         }
         if (attempts >= maxAttempts) return false
 
@@ -73,7 +73,7 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
             id = newWidgetId, type = type,
             x = newX.toInt(), y = newY.toInt(),
             width = widgetWidth.toInt(), height = widgetHeight.toInt(),
-            mediaUri = mediaUri?.let { Uri.parse(it) },
+            mediaUri = mediaUri, // CHANGED: No longer parsing, mediaUri is already Uri?
             textData = if (type == WidgetType.TEXT) textData else null
         )
         _widgets.value = currentWidgets + newWidget

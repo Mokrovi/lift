@@ -135,7 +135,7 @@ fun CameraStreamView(
 
 suspend fun discoverTrD3121Camera(context: Context): CameraDevice? {
     return withContext(Dispatchers.IO) {
-        val staticIp = "192.168.1.200"
+        val staticIp = "192.168.1.188"
         Log.d("CameraDiscovery", "Attempting to connect to static IP: $staticIp")
 
         // Define a list of stream URLs to try for the static IP

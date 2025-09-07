@@ -16,7 +16,8 @@ fun WidgetCanvas(
     modifier: Modifier = Modifier,
     onUpdate: (WidgetData) -> Unit,
     checkCollision: (WidgetData, Float, Float, Float, Float, Boolean) -> Boolean,
-    onCanvasDoubleClick: () -> Unit // <-- NEW PARAMETER
+    onCanvasDoubleClick: () -> Unit,
+    onChangeMediaRequest: (WidgetData) -> Unit // <-- НОВЫЙ ПАРАМЕТР
 ) {
     val widgets: List<WidgetData> by widgetManager.widgets.collectAsState(initial = emptyList())
 
@@ -40,7 +41,8 @@ fun WidgetCanvas(
                         newHeight = newHeight
                     )
                 },
-                onWidgetDoubleClick = onCanvasDoubleClick // <-- PASSING THE CALLBACK HERE
+                onWidgetDoubleClick = onCanvasDoubleClick,
+                onChangeMediaRequest = onChangeMediaRequest // <-- ПЕРЕДАЧА НОВОГО ПАРАМЕТРА
             )
         }
     }

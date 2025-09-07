@@ -68,7 +68,8 @@ fun WidgetDisplayItem(
     onUpdate: (WidgetData) -> Unit,
     onDeleteRequest: (WidgetData) -> Unit,
     checkCollision: (WidgetData, Float, Float, Float, Float, Boolean) -> Boolean,
-    onWidgetDoubleClick: () -> Unit // <-- NEW PARAMETER
+    onWidgetDoubleClick: () -> Unit,
+    onChangeMediaRequest: (WidgetData) -> Unit
 ) {
     val initialWidth = remember(widgetData.width) { widgetData.width.toFloat().toSafeDp(minSize = 48.dp) }
     val initialHeight = remember(widgetData.height) { widgetData.height.toFloat().toSafeDp(minSize = 48.dp) }
@@ -101,9 +102,10 @@ fun WidgetDisplayItem(
     }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
-    var showClockStyleDialog by remember(widgetData.id) { mutableStateOf(false) } // Used for Clock and Text
+    var showClockStyleDialog by remember(widgetData.id) { mutableStateOf(false) }
     var showWeatherSettingsDialog by remember(widgetData.id) { mutableStateOf(false) }
-    var showEditPropertiesDialog by remember(widgetData.id) { mutableStateOf(false) } // General properties
+    var showEditPropertiesDialog by remember(widgetData.id) { mutableStateOf(false) } 
+    var showMediaActionDialog by remember(widgetData.id) { mutableStateOf(false) }
 
     if (showDeleteDialog) {
         AlertDialog(
@@ -121,13 +123,44 @@ fun WidgetDisplayItem(
             }
         )
     }
+    
+    if (showMediaActionDialog) {
+        AlertDialog(
+            onDismissRequest = { showMediaActionDialog = false },
+            title = { Text("Выберите действие") },
+            text = { Text("Что вы хотите сделать с медиа-виджетом?") },
+            confirmButton = {
+                Column(Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = {
+                            onChangeMediaRequest(widgetData)
+                            showMediaActionDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) { Text("Изменить содержимое") }
+                    Button(
+                        onClick = {
+                            showEditPropertiesDialog = true
+                            showMediaActionDialog = false
+                        },
+                         modifier = Modifier.fillMaxWidth()
+                    ) { Text("Изменить свойства") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMediaActionDialog = false }) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
 
     Box(
         modifier = Modifier
             .offset { currentPosition } 
             .size(currentWidth, currentHeight)
             .clip(RoundedCornerShape(widgetData.cornerRadius.dp))
-            .pointerInput(isEditMode, widgetData) { // For dragging the widget
+            .pointerInput(isEditMode, widgetData) { 
                 if (isEditMode) {
                     detectDragGestures(
                         onDragStart = { dragStartOffset = Offset(currentPosition.x.toFloat(), currentPosition.y.toFloat()) },
@@ -159,21 +192,26 @@ fun WidgetDisplayItem(
                     onLongClick = {
                         if (isEditMode) {
                             when (widgetData.type) {
+                                WidgetType.AD, WidgetType.GIF, WidgetType.VIDEO -> {
+                                    showMediaActionDialog = true
+                                }
                                 WidgetType.CLOCK -> showClockStyleDialog = true
                                 WidgetType.WEATHER -> showWeatherSettingsDialog = true
                                 WidgetType.TEXT -> showClockStyleDialog = true 
+                                // For ONVIF_CAMERA and CAMERA, long press will open showEditPropertiesDialog by default
+                                // if not handled by showMediaActionDialog (which it isn't currently for these types)
                                 else -> showEditPropertiesDialog = true 
                             }
                         }
                     },
-                    onDoubleClick = { // <-- ADDED HANDLER
+                    onDoubleClick = { 
                         onWidgetDoubleClick()
                     }
                 ),
             shape = RoundedCornerShape(widgetData.cornerRadius.dp),
             colors = CardDefaults.cardColors(
                 containerColor = widgetData.backgroundColor?.let { Color(it) }
-                    ?: if ((widgetData.type == WidgetType.CAMERA || widgetData.type == WidgetType.GIF || widgetData.type == WidgetType.VIDEO || widgetData.type == WidgetType.ONVIF_CAMERA) && widgetData.mediaUri == null) Color.Gray
+                    ?: if ((widgetData.type == WidgetType.CAMERA || widgetData.type == WidgetType.GIF || widgetData.type == WidgetType.VIDEO || widgetData.type == WidgetType.ONVIF_CAMERA) && widgetData.mediaUri == null && widgetData.type != WidgetType.ONVIF_CAMERA) Color.Gray // Adjusted condition for ONVIF
                     else MaterialTheme.colorScheme.surfaceVariant
             ),
             border = if (isColliding) {
@@ -216,45 +254,51 @@ fun WidgetDisplayItem(
                         )
                     }
                     WidgetType.CAMERA -> {
-                        widgetData.mediaUri?.let {
-                            Image(
-                                painter = rememberAsyncImagePainter(model = it),
-                                contentDescription = "Camera feed",
-                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                        } ?: Text("Нет сигнала", style = MaterialTheme.typography.bodyLarge)
+                        key(widgetData.mediaUri) { 
+                            widgetData.mediaUri?.let {
+                                Image(
+                                    painter = rememberAsyncImagePainter(model = it),
+                                    contentDescription = "Camera feed",
+                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } ?: Text("Нет сигнала", style = MaterialTheme.typography.bodyLarge)
+                        }
                     }
                     WidgetType.ONVIF_CAMERA -> {
-                        val testMjpegUrl = "rtsp://192.168.1.188:554/live/main"
-                        val testCameraData = widgetData.copy(
-                            mediaUri = Uri.parse(testMjpegUrl)
-                        )
-                        OnvifCameraDisplay(
-                            widgetData = testCameraData,
-                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp))
-                        )
+                        val fixedUrl = "rtsp://192.168.1.188:554/live/main"
+                        key(fixedUrl) { // Key with the fixed URL to ensure recomposition if needed
+                            val cameraDataForDisplay = widgetData.copy(
+                                mediaUri = Uri.parse(fixedUrl)
+                            )
+                            OnvifCameraDisplay(
+                                widgetData = cameraDataForDisplay,
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp))
+                            )
+                        }
                     }
                     WidgetType.AD -> {
-                        widgetData.mediaUri?.let { uri ->
-                            val context = LocalContext.current
-                            val imageWidthPx = with(density) { currentWidth.roundToPx() }
-                            val imageHeightPx = with(density) { currentHeight.roundToPx() }
+                        key(widgetData.mediaUri) { 
+                            widgetData.mediaUri?.let { uri ->
+                                val context = LocalContext.current
+                                val imageWidthPx = with(density) { currentWidth.roundToPx() }
+                                val imageHeightPx = with(density) { currentHeight.roundToPx() }
 
-                            val painter = rememberAsyncImagePainter(
-                                model = ImageRequest.Builder(context)
-                                    .data(uri)
-                                    .size(imageWidthPx, imageHeightPx)
-                                    .precision(Precision.EXACT)
-                                    .build()
-                            )
-                            Image(
-                                painter = painter,
-                                contentDescription = "Advertisement background",
-                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp)),
-                                contentScale = ContentScale.Fit
-                            )
-                        } ?: Text("Advertisement Area", style = MaterialTheme.typography.bodyLarge)
+                                val painter = rememberAsyncImagePainter(
+                                    model = ImageRequest.Builder(context)
+                                        .data(uri)
+                                        .size(imageWidthPx, imageHeightPx) 
+                                        .precision(Precision.EXACT) 
+                                        .build()
+                                )
+                                Image(
+                                    painter = painter,
+                                    contentDescription = "Advertisement background",
+                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp)),
+                                    contentScale = ContentScale.Fit 
+                                )
+                            } ?: Text("Advertisement Area", style = MaterialTheme.typography.bodyLarge)
+                        }
                     }
                     WidgetType.TEXT -> {
                         EditableTextWidget(
@@ -264,21 +308,25 @@ fun WidgetDisplayItem(
                         )
                     }
                     WidgetType.GIF -> {
-                        widgetData.mediaUri?.let {
-                            GifImage(
-                                data = it,
-                                contentDescription = "GIF image",
-                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp))
-                            )
-                        } ?: Text("No GIF selected", style = MaterialTheme.typography.bodyLarge)
+                        key(widgetData.mediaUri) { 
+                            widgetData.mediaUri?.let {
+                                GifImage(
+                                    data = it,
+                                    contentDescription = "GIF image",
+                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp))
+                                )
+                            } ?: Text("No GIF selected", style = MaterialTheme.typography.bodyLarge)
+                        }
                     }
                     WidgetType.VIDEO -> {
-                        widgetData.mediaUri?.let {
-                            VideoPlayer(
-                                videoUri = it,
-                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp))
-                            )
-                        } ?: Text("No video selected", style = MaterialTheme.typography.bodyLarge)
+                        key(widgetData.mediaUri) { 
+                            widgetData.mediaUri?.let {
+                                VideoPlayer(
+                                    videoUri = it,
+                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp))
+                                )
+                            } ?: Text("No video selected", style = MaterialTheme.typography.bodyLarge)
+                        }
                     }
                 }
 
@@ -290,14 +338,14 @@ fun WidgetDisplayItem(
                         Icon(Icons.Filled.Delete, contentDescription = "Удалить")
                     }
 
-                    Box( // Resize handle
+                    Box( 
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .size(40.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
-                            .pointerInput(isEditMode, widgetData) { // For resizing
+                            .pointerInput(isEditMode, widgetData) { 
                                 if (isEditMode) {
                                     detectDragGestures(
                                         onDragStart = { resizeStartSize = Pair(currentWidth, currentHeight) },
@@ -341,7 +389,7 @@ fun WidgetDisplayItem(
         }
     }
 
-    if (showEditPropertiesDialog) { // General Properties Dialog
+    if (showEditPropertiesDialog) { 
         WidgetPropertiesDialog(
             showDialog = showEditPropertiesDialog,
             widgetData = widgetData,

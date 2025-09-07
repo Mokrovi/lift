@@ -154,7 +154,7 @@ class MainActivity : ComponentActivity() {
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
 
         widgetRepository = WidgetRepository(this)
-        val initialWidgets = widgetRepository.loadWidgets() // Assuming loadWidgets() exists and returns List<WidgetData>
+        val initialWidgets = widgetRepository.loadWidgets() 
         widgetManager = WidgetManager(initialWidgets) 
 
         sharedPreferences = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
@@ -175,6 +175,8 @@ class MainActivity : ComponentActivity() {
                 var backgroundType by remember { mutableStateOf(sharedPreferences.getString(KEY_BACKGROUND_TYPE, "color") ?: "color") }
                 var canvasBackgroundColor by remember { mutableStateOf(Color(sharedPreferences.getInt(KEY_BACKGROUND_COLOR_ARGB, Color.DarkGray.toArgb()))) }
                 var canvasImageBackgroundUriString by remember { mutableStateOf(sharedPreferences.getString(KEY_BACKGROUND_IMAGE_URI, null)) }
+                
+                var widgetBeingModified by remember { mutableStateOf<WidgetData?>(null) } // <-- НОВОЕ СОСТОЯНИЕ
 
                 val filePickerLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.StartActivityForResult()
@@ -195,7 +197,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                val adMediaPickerLauncher = createMediaPickerLauncher { uri, originalUri ->
+                // --- Launchers for adding new media widgets ---
+                val adMediaPickerLauncher = createMediaPickerLauncher { _, originalUri -> // selectedUri not directly used here
                      val copiedUri = copyFileFromUri(context, originalUri, "ad_media_${System.currentTimeMillis()}")
                     if (copiedUri != null) {
                         if (!widgetManager.addWidget(WidgetType.AD, mediaUri = copiedUri.toString())) {
@@ -206,7 +209,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                val gifMediaPickerLauncher = createMediaPickerLauncher { uri, originalUri ->
+                val gifMediaPickerLauncher = createMediaPickerLauncher { _, originalUri ->
                     val copiedUri = copyFileFromUri(context, originalUri, "gif_${System.currentTimeMillis()}.gif")
                     if (copiedUri != null) {
                         if (!widgetManager.addWidget(WidgetType.GIF, mediaUri = copiedUri.toString())) {
@@ -217,7 +220,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                val videoMediaPickerLauncher = createMediaPickerLauncher { uri, originalUri ->
+                val videoMediaPickerLauncher = createMediaPickerLauncher { _, originalUri ->
                     val copiedUri = copyFileFromUri(context, originalUri, "video_${System.currentTimeMillis()}")
                      if (copiedUri != null) {
                         if (!widgetManager.addWidget(WidgetType.VIDEO, mediaUri = copiedUri.toString())) {
@@ -225,6 +228,55 @@ class MainActivity : ComponentActivity() {
                         }
                     } else {
                         Toast.makeText(this@MainActivity, "Failed to process selected video.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                // --- Launchers for CHANGING existing media widgets ---
+                val changeAdMediaLauncher = createMediaPickerLauncher { _, originalUri ->
+                    val widgetToUpdate = widgetBeingModified
+                    if (widgetToUpdate != null && widgetToUpdate.type == WidgetType.AD) {
+                        val copiedFileUri = copyFileFromUri(context, originalUri, "ad_updated_${System.currentTimeMillis()}")
+                        if (copiedFileUri != null) {
+                            val updatedWidget = widgetToUpdate.copy(mediaUri = copiedFileUri)
+                            widgetManager.updateWidget(updatedWidget)
+                            widgetRepository.saveWidgets(widgetManager.widgets.value)
+                            Toast.makeText(this@MainActivity, "AD Widget updated.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(this@MainActivity, "Failed to update AD media.", Toast.LENGTH_SHORT).show()
+                        }
+                        widgetBeingModified = null
+                    }
+                }
+
+                val changeGifMediaLauncher = createMediaPickerLauncher { _, originalUri ->
+                    val widgetToUpdate = widgetBeingModified
+                    if (widgetToUpdate != null && widgetToUpdate.type == WidgetType.GIF) {
+                        val copiedFileUri = copyFileFromUri(context, originalUri, "gif_updated_${System.currentTimeMillis()}.gif")
+                        if (copiedFileUri != null) {
+                            val updatedWidget = widgetToUpdate.copy(mediaUri = copiedFileUri)
+                            widgetManager.updateWidget(updatedWidget)
+                            widgetRepository.saveWidgets(widgetManager.widgets.value)
+                            Toast.makeText(this@MainActivity, "GIF Widget updated.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(this@MainActivity, "Failed to update GIF.", Toast.LENGTH_SHORT).show()
+                        }
+                        widgetBeingModified = null
+                    }
+                }
+
+                val changeVideoMediaLauncher = createMediaPickerLauncher { _, originalUri ->
+                    val widgetToUpdate = widgetBeingModified
+                    if (widgetToUpdate != null && widgetToUpdate.type == WidgetType.VIDEO) {
+                        val copiedFileUri = copyFileFromUri(context, originalUri, "video_updated_${System.currentTimeMillis()}")
+                        if (copiedFileUri != null) {
+                            val updatedWidget = widgetToUpdate.copy(mediaUri = copiedFileUri)
+                            widgetManager.updateWidget(updatedWidget)
+                            widgetRepository.saveWidgets(widgetManager.widgets.value)
+                            Toast.makeText(this@MainActivity, "Video Widget updated.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(this@MainActivity, "Failed to update video.", Toast.LENGTH_SHORT).show()
+                        }
+                        widgetBeingModified = null
                     }
                 }
 
@@ -238,25 +290,24 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clickable {
                                     val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                                         addCategory(Intent.CATEGORY_OPENABLE)
-                                        type = "image/*" // Allow all image types
+                                        type = "image/*" 
                                     }
                                     filePickerLauncher.launch(intent)
                                 },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Filled.Settings, contentDescription = "Выбрать фоновое изображение", modifier = Modifier.padding(end = 8.dp)) // Changed for testing
+                                Icon(Icons.Filled.Settings, contentDescription = "Выбрать фоновое изображение", modifier = Modifier.padding(end = 8.dp))
                                 Text("Выбрать фоновое изображение")
                             }
                             if (canvasImageBackgroundUriString != null) {
                                 Button(
                                     onClick = {
                                         canvasImageBackgroundUriString = null
-                                        canvasBackgroundColor = Color.DarkGray // Reset to default color or last used color
+                                        canvasBackgroundColor = Color.DarkGray 
                                         backgroundType = "color"
                                         with(sharedPreferences.edit()) {
                                             putString(KEY_BACKGROUND_TYPE, "color")
                                             remove(KEY_BACKGROUND_IMAGE_URI)
-                                            // Optionally save the current canvasBackgroundColor if you want it to persist
                                             putInt(KEY_BACKGROUND_COLOR_ARGB, canvasBackgroundColor.toArgb())
                                             apply()
                                         }
@@ -270,18 +321,18 @@ class MainActivity : ComponentActivity() {
                              Text("Или выберите цвет фона:", modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceAround // Distribute colors evenly
+                                horizontalArrangement = Arrangement.SpaceAround 
                             ) {
                                 val colors = listOf(Color.LightGray, Color.White, Color.Black, Color.Blue, Color.Green, Color.DarkGray, Color.Red, Color.Yellow)
                                 colors.forEach { color ->
                                     ColorButton(color = color) {
                                         canvasBackgroundColor = color
-                                        canvasImageBackgroundUriString = null // Remove image if color is chosen
+                                        canvasImageBackgroundUriString = null 
                                         backgroundType = "color"
                                         with(sharedPreferences.edit()) {
                                             putString(KEY_BACKGROUND_TYPE, "color")
                                             putInt(KEY_BACKGROUND_COLOR_ARGB, color.toArgb())
-                                            remove(KEY_BACKGROUND_IMAGE_URI) // Ensure image URI is cleared
+                                            remove(KEY_BACKGROUND_IMAGE_URI) 
                                             apply()
                                         }
                                     }
@@ -300,7 +351,7 @@ class MainActivity : ComponentActivity() {
                             ) {
                                 Text("Сохранить расположение виджетов")
                             }
-                            Spacer(Modifier.weight(1f)) // Pushes the close button to the bottom
+                            Spacer(Modifier.weight(1f)) 
                             OutlinedButton(
                                 onClick = { scope.launch { drawerState.close() } },
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
@@ -328,13 +379,13 @@ class MainActivity : ComponentActivity() {
                                             checked = isEditMode,
                                             onCheckedChange = { 
                                                 isEditMode = it 
-                                                if (!isEditMode) { // Save widgets when exiting edit mode
+                                                if (!isEditMode) { 
                                                     widgetRepository.saveWidgets(widgetManager.widgets.value)
                                                     Toast.makeText(context, "Расположение виджетов сохранено", Toast.LENGTH_SHORT).show()
                                                 }
                                             }
                                         )
-                                        IconButton(onClick = { currentDialogWidgetType = WidgetType.TEXT }) { // Default to text, or remove default
+                                        IconButton(onClick = { currentDialogWidgetType = WidgetType.TEXT }) { 
                                             Icon(Icons.Filled.Add, contentDescription = "Добавить виджет")
                                         }
                                     }
@@ -381,6 +432,7 @@ class MainActivity : ComponentActivity() {
                                 isEditMode = isEditMode,
                                 onUpdate = { widgetData: WidgetData ->
                                     widgetManager.updateWidget(widgetData)
+                                    widgetRepository.saveWidgets(widgetManager.widgets.value) // Save on any update
                                 },
                                 checkCollision = { widgetData: WidgetData, x: Float, y: Float, width: Float, height: Float, ignoreSelf: Boolean ->
                                     widgetManager.checkCollisionWithExisting(widgetData, x, y, width, height)
@@ -392,6 +444,17 @@ class MainActivity : ComponentActivity() {
                                     } else {
                                         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
                                     }
+                                },
+                                onChangeMediaRequest = { widgetData -> // <-- ПЕРЕДАЧА ЛЯМБДЫ
+                                    widgetBeingModified = widgetData
+                                    when (widgetData.type) {
+                                        WidgetType.AD -> changeAdMediaLauncher.launch("image/*")
+                                        WidgetType.GIF -> changeGifMediaLauncher.launch("image/gif")
+                                        WidgetType.VIDEO -> changeVideoMediaLauncher.launch("video/*")
+                                        else -> {
+                                            widgetBeingModified = null // Should not happen
+                                        }
+                                    }
                                 }
                             )
 
@@ -402,14 +465,13 @@ class MainActivity : ComponentActivity() {
                                         val success = when (widgetType) {
                                             WidgetType.TEXT -> widgetManager.addWidget(widgetType, textData = data as String)
                                             WidgetType.AD, WidgetType.GIF, WidgetType.VIDEO -> {
-                                                // Launch the appropriate picker
                                                 when (widgetType) {
-                                                    WidgetType.AD -> adMediaPickerLauncher.launch("*/*") // Changed
-                                                    WidgetType.GIF -> gifMediaPickerLauncher.launch("image/gif") // Changed
-                                                    WidgetType.VIDEO -> videoMediaPickerLauncher.launch("video/*") // Changed
+                                                    WidgetType.AD -> adMediaPickerLauncher.launch("image/*") // ИЗМЕНЕНО НА image/*
+                                                    WidgetType.GIF -> gifMediaPickerLauncher.launch("image/gif")
+                                                    WidgetType.VIDEO -> videoMediaPickerLauncher.launch("video/*")
                                                     else -> {}
                                                 }
-                                                true // Assume picker will handle adding or show toast
+                                                true 
                                             }
                                             WidgetType.ONVIF_CAMERA -> {
                                                 scope.launch {
@@ -422,15 +484,15 @@ class MainActivity : ComponentActivity() {
                                                         Toast.makeText(this@MainActivity, "ONVIF camera not found or RTSP URL missing.", Toast.LENGTH_LONG).show()
                                                     }
                                                 }
-                                                true // Assume async operation handles success/failure toast
+                                                true 
                                             }
                                             else -> widgetManager.addWidget(widgetType)
                                         }
-                                        if (!success && widgetType != WidgetType.AD && widgetType != WidgetType.GIF && widgetType != WidgetType.VIDEO && widgetType != WidgetType.ONVIF_CAMERA) { // Check success for non-picker/non-async types
+                                        if (!success && widgetType != WidgetType.AD && widgetType != WidgetType.GIF && widgetType != WidgetType.VIDEO && widgetType != WidgetType.ONVIF_CAMERA) { 
                                             Toast.makeText(this@MainActivity, "Could not place ${widgetType.name} widget: No free space or error.", Toast.LENGTH_SHORT).show()
                                         }
-                                        currentDialogWidgetType = null // Close dialog after attempting to add
-                                        if (widgetType == WidgetType.TEXT && data == "") showTextInputDialog = true // Reopen text input if it was empty from general dialog
+                                        currentDialogWidgetType = null 
+                                        if (widgetType == WidgetType.TEXT && data == "") showTextInputDialog = true 
                                     },
                                     onShowTextDialog = { showTextInputDialog = true },
                                     widgetManager = widgetManager,
@@ -481,13 +543,12 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun createMediaPickerLauncher(
         onMediaSelected: (selectedUri: Uri, originalUri: Uri) -> Unit
-    ): ManagedActivityResultLauncher<String, Uri?> { // Changed return type
+    ): ManagedActivityResultLauncher<String, Uri?> { 
         val context = LocalContext.current
         return rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
             uri?.let {
-                val originalUriForCopy = it // Preserve the original URI for copying
-                // For persistent access if needed across device restarts, or if you are not copying immediately:
-                // context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                val originalUriForCopy = it 
+                // context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) // Consider if needed for long term access without immediate copy
                 onMediaSelected(it, originalUriForCopy)
             }
         }
@@ -513,9 +574,9 @@ fun AddWidgetDialog(
     widgetManager: WidgetManager, 
     scope: CoroutineScope,
     mainActivity: MainActivity, 
-    adMediaPickerLauncher: ManagedActivityResultLauncher<String, Uri?>, // Changed type
-    gifMediaPickerLauncher: ManagedActivityResultLauncher<String, Uri?>, // Changed type
-    videoMediaPickerLauncher: ManagedActivityResultLauncher<String, Uri?> // Changed type
+    adMediaPickerLauncher: ManagedActivityResultLauncher<String, Uri?>, 
+    gifMediaPickerLauncher: ManagedActivityResultLauncher<String, Uri?>, 
+    videoMediaPickerLauncher: ManagedActivityResultLauncher<String, Uri?> 
 ) {
     AlertDialog(
         onDismissRequest = onDismissRequest,
@@ -526,16 +587,14 @@ fun AddWidgetDialog(
                     AddWidgetRow(widgetType, widgetType.displayName) {
                         when (widgetType) {
                             WidgetType.TEXT -> onShowTextDialog()
-                            WidgetType.AD -> adMediaPickerLauncher.launch("*/*") // Changed argument
-                            WidgetType.GIF -> gifMediaPickerLauncher.launch("image/gif") // Changed argument
-                            WidgetType.VIDEO -> videoMediaPickerLauncher.launch("video/*") // Changed argument
+                            WidgetType.AD -> adMediaPickerLauncher.launch("image/*") // ИЗМЕНЕНО НА image/*
+                            WidgetType.GIF -> gifMediaPickerLauncher.launch("image/gif")
+                            WidgetType.VIDEO -> videoMediaPickerLauncher.launch("video/*")
                             WidgetType.ONVIF_CAMERA -> {
-                                // ONVIF discovery is now part of the main onAddWidget flow
                                 onAddWidget(WidgetType.ONVIF_CAMERA, null)
                             }
-                            else -> onAddWidget(widgetType, null) // For Weather, Clock
+                            else -> onAddWidget(widgetType, null) 
                         }
-                        // Close dialog for types that don't open another dialog/picker immediately
                         if (widgetType != WidgetType.TEXT && widgetType != WidgetType.AD && 
                             widgetType != WidgetType.GIF && widgetType != WidgetType.VIDEO && widgetType != WidgetType.ONVIF_CAMERA) {
                             onDismissRequest()

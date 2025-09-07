@@ -1,7 +1,8 @@
 package com.example.myapplication
 
+import android.content.Context
 import android.net.Uri
-import android.util.Log // Добавим для логирования ошибок
+import android.util.Log
 import com.example.myapplication.data.WeatherRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -9,7 +10,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.UUID
+
+data class ProcessedWidgetResult(
+    val widgetData: WidgetData,
+    val statusCode: Int
+)
 
 class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
     private val _widgets = MutableStateFlow(initialWidgets)
@@ -21,17 +28,55 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
     private var currentLatitude: Double? = null
     private var currentLongitude: Double? = null
 
+    private fun checkMediaResourceExists(context: Context, mediaUri: Uri?): Boolean {
+        if (mediaUri == null) return false
+        if ("file" == mediaUri.scheme) {
+            val filePath = mediaUri.path
+            if (filePath != null) {
+                return File(filePath).exists()
+            }
+            return false
+        }
+        return true
+    }
+
+    fun processSavedWidget(context: Context, widgetData: WidgetData): ProcessedWidgetResult {
+        return when (widgetData.type) {
+            WidgetType.AD, WidgetType.GIF, WidgetType.VIDEO -> {
+                if (widgetData.mediaUri != null && checkMediaResourceExists(context, widgetData.mediaUri)) {
+                    ProcessedWidgetResult(widgetData, 200)
+                } else {
+                    Log.w("WidgetManager", "Media resource not found for widget ${widgetData.id} (URI: ${widgetData.mediaUri}). Type: ${widgetData.type}")
+                    ProcessedWidgetResult(widgetData.copy(mediaUri = null), 404)
+                }
+            }
+            else -> ProcessedWidgetResult(widgetData, 200)
+        }
+    }
+
+    fun actuallyAddProcessedWidget(processedWidgetData: WidgetData) {
+        if (_widgets.value.any { it.id == processedWidgetData.id }) {
+            Log.w("WidgetManager", "Widget with ID ${processedWidgetData.id} already exists. Skipping add.")
+            return
+        }
+        _widgets.value = _widgets.value + processedWidgetData
+        if (processedWidgetData.type == WidgetType.WEATHER) {
+            fetchWeatherData(processedWidgetData.id)
+        }
+        Log.d("WidgetManager", "Successfully added widget ${processedWidgetData.id} to the canvas.")
+    }
+
     fun updateCurrentLocation(latitude: Double?, longitude: Double?) {
         currentLatitude = latitude
         currentLongitude = longitude
         _widgets.value.forEach { widget ->
-            if (widget.type == WidgetType.WEATHER && widget.autoLocate) { // Обновляем только если в авто-режиме
+            if (widget.type == WidgetType.WEATHER && widget.autoLocate) {
                 fetchWeatherData(widget.id)
             }
         }
     }
 
-    fun addWidget(
+    fun addNewWidgetAtAvailableSlot(
         type: WidgetType,
         mediaUri: String? = null,
         textData: String? = null
@@ -44,29 +89,42 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
 
         var collision = true
         var attempts = 0
-        val maxAttempts = 100
+        val maxAttempts = 100 // Original maxAttempts
 
         while (collision && attempts < maxAttempts) {
             collision = false
             val potentialWidgetBounds = WidgetData(
-                id = "temp_id_${UUID.randomUUID()}", type = type,
+                id = "temp_id_placement_${UUID.randomUUID()}", type = type,
                 x = newX.toInt(), y = newY.toInt(),
                 width = widgetWidth.toInt(), height = widgetHeight.toInt(),
-                mediaUri = mediaUri?.let { Uri.parse(it) },
-                textData = if (type == WidgetType.TEXT) textData else null
+                mediaUri = mediaUri?.let { Uri.parse(it) }, // Added for completeness, though not strictly needed for internal collision check
+                textData = if (type == WidgetType.TEXT) textData else null // Added for completeness
             )
-            if (checkCollisionInternal(potentialWidgetBounds, newX, newY, widgetWidth, widgetHeight, currentWidgets)) {
+
+            if (checkCollisionInternal(potentialWidgetBounds, newX, newY, widgetWidth, widgetHeight, currentWidgets, false)) {
                 collision = true
                 newX += widgetWidth + 16f
-                if (newX + widgetWidth > 1000f) {
+                if (newX + widgetWidth > 1000f) { // Reverted X boundary check
                     newX = 16f
                     newY += widgetHeight + 16f
                 }
             }
             attempts++
-            if (newY + widgetHeight > 2000f) return false
+            if (newY + widgetHeight > 2000f) { // Reverted Y boundary check for canvas full
+                 Log.e("WidgetManager", "Could not place new widget: Canvas full (Y boundary exceeded).")
+                return false
+            }
         }
-        if (attempts >= maxAttempts) return false
+
+        if (attempts >= maxAttempts && collision) { // Check collision flag as well if max attempts reached
+            Log.e("WidgetManager", "Could not place new widget: Max placement attempts reached and still colliding.")
+            return false
+        }
+        if (collision) { // Should ideally be caught by the Y boundary or max attempts, but as a safeguard
+             Log.e("WidgetManager", "Could not place new widget: Collision detected after loop completion (should not happen).")
+            return false
+        }
+
 
         val newWidgetId = UUID.randomUUID().toString()
         val newWidget = WidgetData(
@@ -80,23 +138,21 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
         if (type == WidgetType.WEATHER) {
             fetchWeatherData(newWidgetId)
         }
+        Log.d("WidgetManager", "Added new widget ${newWidget.id} of type $type at ($newX, $newY)")
         return true
     }
 
     fun fetchWeatherData(widgetId: String) {
         val widget = _widgets.value.find { it.id == widgetId }
         if (widget == null || widget.type != WidgetType.WEATHER) {
-            Log.d("WidgetManager", "fetchWeatherData: Widget not found or not a weather widget. ID: $widgetId")
             return
         }
 
         coroutineScope.launch {
             if (widget.autoLocate) {
-                Log.d("WidgetManager", "Fetching weather for widget ${widget.id} in AUTO mode.")
                 val lat = currentLatitude
                 val lon = currentLongitude
                 if (lat != null && lon != null) {
-                    Log.d("WidgetManager", "Using coordinates: Lat=$lat, Lon=$lon")
                     val weatherInfo = weatherRepository.getCurrentWeatherByCoordinates(lat, lon)
                     if (weatherInfo != null) {
                         _widgets.value = _widgets.value.map {
@@ -107,11 +163,10 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
                                     weatherIconUrl = weatherInfo.weather.firstOrNull()?.icon?.let { iconCode ->
                                         "https://openweathermap.org/img/wn/$iconCode@2x.png"
                                     },
-                                    cityName = weatherInfo.cityName // Обновляем cityName из API
+                                    cityName = weatherInfo.cityName
                                 )
                             } else { it }
                         }
-                        Log.d("WidgetManager", "Weather data updated for widget ${widget.id} (Auto): ${weatherInfo.cityName}")
                     } else {
                          Log.e("WidgetManager", "Failed to get weather by coords for widget ${widget.id}")
                     }
@@ -123,14 +178,13 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
                                 temperature = null,
                                 weatherDescription = "Location unavailable",
                                 weatherIconUrl = null,
-                                cityName = "N/A" // Или оставить widget.cityName
+                                cityName = widget.cityName ?: "N/A"
                             )
                         } else { it }
                     }
                 }
-            } else { // Ручной режим (autoLocate = false)
-                val cityNameToFetch = widget.cityName // Должен быть равен manualCityName из WidgetData, установленным в onSaveSettings
-                Log.d("WidgetManager", "Fetching weather for widget ${widget.id} in MANUAL mode for city: '$cityNameToFetch'")
+            } else { 
+                val cityNameToFetch = widget.cityName
                 if (!cityNameToFetch.isNullOrBlank()) {
                     val weatherInfo = weatherRepository.getCurrentWeatherByCityName(cityNameToFetch)
                     if (weatherInfo != null) {
@@ -142,11 +196,10 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
                                     weatherIconUrl = weatherInfo.weather.firstOrNull()?.icon?.let { iconCode ->
                                         "https://openweathermap.org/img/wn/$iconCode@2x.png"
                                     },
-                                    cityName = weatherInfo.cityName // Можно обновить cityName из API, если он возвращает каноническое имя
+                                    cityName = weatherInfo.cityName
                                 )
                             } else { it }
                         }
-                         Log.d("WidgetManager", "Weather data updated for widget ${widget.id} (Manual): ${weatherInfo.cityName}")
                     } else {
                         Log.e("WidgetManager", "Failed to get weather by city '$cityNameToFetch' for widget ${widget.id}")
                         _widgets.value = _widgets.value.map {
@@ -155,7 +208,7 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
                                     temperature = null,
                                     weatherDescription = "City not found: $cityNameToFetch",
                                     weatherIconUrl = null,
-                                    cityName = cityNameToFetch // Оставляем введенное пользователем имя
+                                    cityName = cityNameToFetch
                                 )
                             } else { it }
                         }
@@ -179,19 +232,17 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
 
     fun updateWidget(updatedWidget: WidgetData) {
         val previousWidgetState = _widgets.value.find { it.id == updatedWidget.id }
-
         _widgets.value = _widgets.value.map {
             if (it.id == updatedWidget.id) updatedWidget else it
         }
 
         if (updatedWidget.type == WidgetType.WEATHER) {
-            val needsRefresh = updatedWidget.temperature == null || // Данные были сброшены, нужна загрузка
-                               (updatedWidget.autoLocate && previousWidgetState?.autoLocate == false) || // Переключились на авто
-                               (!updatedWidget.autoLocate && previousWidgetState?.autoLocate == true && !updatedWidget.cityName.isNullOrBlank()) || // Переключились на ручной с указанным городом
-                               (!updatedWidget.autoLocate && previousWidgetState?.cityName != updatedWidget.cityName && !updatedWidget.cityName.isNullOrBlank()) // Остались в ручном, но город изменился
+            val needsRefresh = updatedWidget.temperature == null ||
+                               (updatedWidget.autoLocate && previousWidgetState?.autoLocate == false) ||
+                               (!updatedWidget.autoLocate && previousWidgetState?.autoLocate == true && !updatedWidget.cityName.isNullOrBlank()) ||
+                               (!updatedWidget.autoLocate && previousWidgetState?.cityName != updatedWidget.cityName && !updatedWidget.cityName.isNullOrBlank())
 
             if (needsRefresh) {
-                Log.d("WidgetManager", "Widget ${updatedWidget.id} updated, needs weather refresh. Auto: ${updatedWidget.autoLocate}, City: ${updatedWidget.cityName}, TempIsNull: ${updatedWidget.temperature == null}")
                 fetchWeatherData(updatedWidget.id)
             }
         }
@@ -215,9 +266,13 @@ class WidgetManager(initialWidgets: List<WidgetData> = emptyList()) {
         val widgetBottom = checkY + checkHeight
         for (existingWidget in widgetsToCompareAgainst) {
             if (ignoreSelf && existingWidget.id == widget.id) continue
-            if (checkX < existingWidget.x + existingWidget.width &&
+
+            val existingWidgetRight = existingWidget.x + existingWidget.width
+            val existingWidgetBottom = existingWidget.y + existingWidget.height
+
+            if (checkX < existingWidgetRight &&
                 widgetRight > existingWidget.x &&
-                checkY < existingWidget.y + existingWidget.height &&
+                checkY < existingWidgetBottom &&
                 widgetBottom > existingWidget.y) {
                 return true
             }

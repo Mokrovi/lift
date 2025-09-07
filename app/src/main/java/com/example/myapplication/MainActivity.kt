@@ -57,6 +57,7 @@ import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
@@ -184,8 +185,7 @@ class MainActivity : ComponentActivity() {
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
 
         widgetRepository = WidgetRepository(this)
-        val initialWidgets = widgetRepository.loadWidgets() 
-        widgetManager = WidgetManager(initialWidgets) 
+        widgetManager = WidgetManager(emptyList()) // Initialize with empty list
 
         sharedPreferences = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
@@ -206,10 +206,31 @@ class MainActivity : ComponentActivity() {
                 var canvasBackgroundColor by remember { mutableStateOf(Color(sharedPreferences.getInt(KEY_BACKGROUND_COLOR_ARGB, Color.DarkGray.toArgb()))) }
                 var canvasImageBackgroundUriString by remember { mutableStateOf(sharedPreferences.getString(KEY_BACKGROUND_IMAGE_URI, null)) }
                 
-                var widgetBeingModified by remember { mutableStateOf<WidgetData?>(null) } 
+                var widgetBeingModified by remember { mutableStateOf<WidgetData?>(null) }
 
                 var showBackgroundHexColorDialog by remember { mutableStateOf(false) }
 
+                // Load and process saved widgets
+                LaunchedEffect(key1 = widgetManager, key2 = widgetRepository) {
+                    val savedWidgets = widgetRepository.loadWidgets().shuffled() // Load and shuffle
+                    Log.d("MainActivity", "Loaded ${savedWidgets.size} saved widgets. Starting sequential processing.")
+                    for (savedWidgetData in savedWidgets) {
+                        Log.d("MainActivity", "Processing widget: ${savedWidgetData.id}, Type: ${savedWidgetData.type}")
+                        val result = widgetManager.processSavedWidget(applicationContext, savedWidgetData)
+                        widgetManager.actuallyAddProcessedWidget(result.widgetData)
+
+                        Log.d("MainActivity", "Widget ${result.widgetData.id} processed with status code: ${result.statusCode}")
+
+                        // Delay for all widgets except ONVIF_CAMERA to simulate loader and allow UI to update
+                        if (result.widgetData.type != WidgetType.ONVIF_CAMERA) {
+                            Log.d("MainActivity", "Widget ${result.widgetData.id} is not ONVIF_CAMERA, delaying for next widget load.")
+                            delay(500) // 0.5 second delay before loading the next widget
+                        } else {
+                            Log.d("MainActivity", "Widget ${result.widgetData.id} is ONVIF_CAMERA, loading next widget immediately.")
+                        }
+                    }
+                    Log.d("MainActivity", "Finished processing all saved widgets.")
+                }
 
                 val filePickerLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.StartActivityForResult()
@@ -234,7 +255,7 @@ class MainActivity : ComponentActivity() {
                 val adMediaPickerLauncher = createMediaPickerLauncher { _, originalUri -> 
                      val copiedUri = copyFileFromUri(context, originalUri, "ad_media_${System.currentTimeMillis()}")
                     if (copiedUri != null) {
-                        if (!widgetManager.addWidget(WidgetType.AD, mediaUri = copiedUri.toString())) {
+                        if (!widgetManager.addNewWidgetAtAvailableSlot(WidgetType.AD, mediaUri = copiedUri.toString())) {
                             Toast.makeText(this@MainActivity, "Could not place AD widget: No free space.", Toast.LENGTH_SHORT).show()
                         }
                     } else {
@@ -245,7 +266,7 @@ class MainActivity : ComponentActivity() {
                 val gifMediaPickerLauncher = createMediaPickerLauncher { _, originalUri ->
                     val copiedUri = copyFileFromUri(context, originalUri, "gif_${System.currentTimeMillis()}.gif")
                     if (copiedUri != null) {
-                        if (!widgetManager.addWidget(WidgetType.GIF, mediaUri = copiedUri.toString())) {
+                        if (!widgetManager.addNewWidgetAtAvailableSlot(WidgetType.GIF, mediaUri = copiedUri.toString())) {
                             Toast.makeText(this@MainActivity, "Could not place GIF widget: No free space.", Toast.LENGTH_SHORT).show()
                         }
                     } else {
@@ -256,7 +277,7 @@ class MainActivity : ComponentActivity() {
                 val videoMediaPickerLauncher = createMediaPickerLauncher { _, originalUri ->
                     val copiedUri = copyFileFromUri(context, originalUri, "video_${System.currentTimeMillis()}")
                      if (copiedUri != null) {
-                        if (!widgetManager.addWidget(WidgetType.VIDEO, mediaUri = copiedUri.toString())) {
+                        if (!widgetManager.addNewWidgetAtAvailableSlot(WidgetType.VIDEO, mediaUri = copiedUri.toString())) {
                             Toast.makeText(this@MainActivity, "Could not place Video widget: No free space.", Toast.LENGTH_SHORT).show()
                         }
                     } else {
@@ -272,7 +293,7 @@ class MainActivity : ComponentActivity() {
                         if (copiedFileUri != null) {
                             val updatedWidget = widgetToUpdate.copy(mediaUri = copiedFileUri)
                             widgetManager.updateWidget(updatedWidget)
-                            widgetRepository.saveWidgets(widgetManager.widgets.value)
+                            // widgetRepository.saveWidgets(widgetManager.widgets.value) // Save moved to edit mode toggle & explicit save
                             Toast.makeText(this@MainActivity, "AD Widget updated.", Toast.LENGTH_SHORT).show()
                         } else {
                             Toast.makeText(this@MainActivity, "Failed to update AD media.", Toast.LENGTH_SHORT).show()
@@ -288,7 +309,7 @@ class MainActivity : ComponentActivity() {
                         if (copiedFileUri != null) {
                             val updatedWidget = widgetToUpdate.copy(mediaUri = copiedFileUri)
                             widgetManager.updateWidget(updatedWidget)
-                            widgetRepository.saveWidgets(widgetManager.widgets.value)
+                            // widgetRepository.saveWidgets(widgetManager.widgets.value)
                             Toast.makeText(this@MainActivity, "GIF Widget updated.", Toast.LENGTH_SHORT).show()
                         } else {
                             Toast.makeText(this@MainActivity, "Failed to update GIF.", Toast.LENGTH_SHORT).show()
@@ -304,7 +325,7 @@ class MainActivity : ComponentActivity() {
                         if (copiedFileUri != null) {
                             val updatedWidget = widgetToUpdate.copy(mediaUri = copiedFileUri)
                             widgetManager.updateWidget(updatedWidget)
-                            widgetRepository.saveWidgets(widgetManager.widgets.value)
+                            // widgetRepository.saveWidgets(widgetManager.widgets.value)
                             Toast.makeText(this@MainActivity, "Video Widget updated.", Toast.LENGTH_SHORT).show()
                         } else {
                             Toast.makeText(this@MainActivity, "Failed to update video.", Toast.LENGTH_SHORT).show()
@@ -444,7 +465,7 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             }
                                         )
-                                        IconButton(onClick = { currentDialogWidgetType = WidgetType.TEXT }) { 
+                                        IconButton(onClick = { currentDialogWidgetType = WidgetType.TEXT }) { // Default to TEXT, AddWidgetDialog handles selection
                                             Icon(Icons.Filled.Add, contentDescription = "Добавить виджет")
                                         }
                                     }
@@ -491,7 +512,7 @@ class MainActivity : ComponentActivity() {
                                 isEditMode = isEditMode,
                                 onUpdate = { widgetData: WidgetData ->
                                     widgetManager.updateWidget(widgetData)
-                                    widgetRepository.saveWidgets(widgetManager.widgets.value) // Save on any update
+                                    // widgetRepository.saveWidgets(widgetManager.widgets.value) // Save on explicit action or edit mode toggle
                                 },
                                 checkCollision = { widgetData: WidgetData, x: Float, y: Float, width: Float, height: Float, ignoreSelf: Boolean ->
                                     widgetManager.checkCollisionWithExisting(widgetData, x, y, width, height)
@@ -522,7 +543,7 @@ class MainActivity : ComponentActivity() {
                                     onDismissRequest = { currentDialogWidgetType = null },
                                     onAddWidget = { widgetType, data ->
                                         val success = when (widgetType) {
-                                            WidgetType.TEXT -> widgetManager.addWidget(widgetType, textData = data as String)
+                                            WidgetType.TEXT -> widgetManager.addNewWidgetAtAvailableSlot(widgetType, textData = data as String)
                                             WidgetType.AD, WidgetType.GIF, WidgetType.VIDEO -> {
                                                 when (widgetType) {
                                                     WidgetType.AD -> adMediaPickerLauncher.launch("image/*") 
@@ -530,13 +551,13 @@ class MainActivity : ComponentActivity() {
                                                     WidgetType.VIDEO -> videoMediaPickerLauncher.launch("video/*")
                                                     else -> {}
                                                 }
-                                                true 
+                                                true // Launchers handle actual addition via callbacks
                                             }
                                             WidgetType.ONVIF_CAMERA -> {
                                                 scope.launch {
                                                     val cameraDevice = discoverTrD3121Camera(this@MainActivity)
-                                                    if (cameraDevice != null && !cameraDevice.streamUrl.isNullOrEmpty()) {
-                                                        if (!widgetManager.addWidget(WidgetType.ONVIF_CAMERA, mediaUri = cameraDevice.streamUrl)) {
+                                                    if (cameraDevice != null && cameraDevice.streamUrl.isNotEmpty()) { // Check isNullOrEmpty
+                                                        if (!widgetManager.addNewWidgetAtAvailableSlot(WidgetType.ONVIF_CAMERA, mediaUri = cameraDevice.streamUrl)) {
                                                             Toast.makeText(this@MainActivity, "Could not place ONVIF Camera: No free space.", Toast.LENGTH_SHORT).show()
                                                         }
                                                     } else {
@@ -545,18 +566,21 @@ class MainActivity : ComponentActivity() {
                                                 }
                                                 true 
                                             }
-                                            else -> widgetManager.addWidget(widgetType)
+                                            else -> widgetManager.addNewWidgetAtAvailableSlot(widgetType)
                                         }
                                         if (!success && widgetType != WidgetType.AD && widgetType != WidgetType.GIF && widgetType != WidgetType.VIDEO && widgetType != WidgetType.ONVIF_CAMERA) { 
                                             Toast.makeText(this@MainActivity, "Could not place ${widgetType.name} widget: No free space or error.", Toast.LENGTH_SHORT).show()
                                         }
                                         currentDialogWidgetType = null 
-                                        if (widgetType == WidgetType.TEXT && data == "") showTextInputDialog = true 
+                                        // if (widgetType == WidgetType.TEXT && data == "") showTextInputDialog = true // Redundant with new text input flow
                                     },
-                                    onShowTextDialog = { showTextInputDialog = true },
-                                    widgetManager = widgetManager,
-                                    scope = scope,
-                                    mainActivity = this@MainActivity,
+                                    onShowTextDialog = { 
+                                        currentTextValue = "" // Clear previous text
+                                        showTextInputDialog = true 
+                                    },
+                                    widgetManager = widgetManager, // Not directly used by AddWidgetDialog itself for adding
+                                    scope = scope, // For ONVIF discovery
+                                    mainActivity = this@MainActivity, // For ONVIF discovery context
                                     adMediaPickerLauncher = adMediaPickerLauncher,
                                     gifMediaPickerLauncher = gifMediaPickerLauncher,
                                     videoMediaPickerLauncher = videoMediaPickerLauncher
@@ -576,7 +600,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                     confirmButton = {
                                         Button(onClick = {
-                                            if (!widgetManager.addWidget(WidgetType.TEXT, textData = currentTextValue)) {
+                                            if (!widgetManager.addNewWidgetAtAvailableSlot(WidgetType.TEXT, textData = currentTextValue)) {
                                                 Toast.makeText(this@MainActivity, "Could not place Text widget: No free space.", Toast.LENGTH_SHORT).show()
                                             }
                                             currentTextValue = ""
@@ -586,7 +610,10 @@ class MainActivity : ComponentActivity() {
                                         }
                                     },
                                     dismissButton = {
-                                        TextButton(onClick = { showTextInputDialog = false }) {
+                                        TextButton(onClick = { 
+                                            currentTextValue = ""
+                                            showTextInputDialog = false 
+                                        }) {
                                             Text("Отмена")
                                         }
                                     }
@@ -601,14 +628,14 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun createMediaPickerLauncher(
-        onMediaSelected: (selectedUri: Uri, originalUri: Uri) -> Unit
+        onMediaSelected: (selectedUri: Uri, originalUri: Uri) -> Unit // Original URI is the one from picker
     ): ManagedActivityResultLauncher<String, Uri?> { 
-        val context = LocalContext.current
+        val context = LocalContext.current // Use Activity context if copyFileFromUri needs it specifically for filesDir
         return rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
             uri?.let {
-                val originalUriForCopy = it 
-                // context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) // Consider if needed for long term access without immediate copy
-                onMediaSelected(it, originalUriForCopy)
+                // Persist permission for content URIs if you intend to use them directly for a longer period
+                // context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                onMediaSelected(it, it) // Pass the picked URI as both selected and original for simplicity here
             }
         }
     }
@@ -635,7 +662,12 @@ fun ColorPickerDialog(
     var parsedColor by remember { mutableStateOf(initialColor) }
 
     LaunchedEffect(colorHexInput) {
-        parsedColor = parseHexColor(colorHexInput) ?: initialColor
+        // Allow empty input or just # without crashing
+        if (colorHexInput.isEmpty() || (colorHexInput.startsWith("#") && colorHexInput.length == 1)) {
+            parsedColor = initialColor // Or some other default visual cue for invalid input
+        } else {
+            parsedColor = parseHexColor(colorHexInput) ?: initialColor // Fallback to initial if parsing fails
+        }
     }
 
     AlertDialog(
@@ -653,10 +685,10 @@ fun ColorPickerDialog(
                             Modifier
                                 .size(24.dp)
                                 .background(
-                                    parsedColor,
+                                    parsedColor, // Use the continuously updated parsedColor for preview
                                     CircleShape
                                 )
-                                .border(BorderStroke(1.dp, Color.Gray), CircleShape) // Error was here
+                                .border(BorderStroke(1.dp, Color.Gray), CircleShape)
                         )
                     }
                 )
@@ -670,7 +702,7 @@ fun ColorPickerDialog(
                     }
                     onDismissRequest()
                 },
-                enabled = parseHexColor(colorHexInput) != null
+                enabled = parseHexColor(colorHexInput) != null // Enable only if HEX is valid
             ) {
                 Text("Применить")
             }
@@ -686,11 +718,11 @@ fun ColorPickerDialog(
 @Composable
 fun AddWidgetDialog(
     onDismissRequest: () -> Unit,
-    onAddWidget: (WidgetType, Any?) -> Unit, 
-    onShowTextDialog: () -> Unit,
-    widgetManager: WidgetManager, 
-    scope: CoroutineScope,
-    mainActivity: MainActivity, 
+    onAddWidget: (WidgetType, Any?) -> Unit, // Callback for non-media/non-text widgets or to trigger pickers
+    onShowTextDialog: () -> Unit, // Specific callback to show text input dialog
+    widgetManager: WidgetManager, // Pass if needed for other logic, but not for direct add here
+    scope: CoroutineScope, // For launching coroutines (e.g., camera discovery)
+    mainActivity: MainActivity, // Context for camera discovery
     adMediaPickerLauncher: ManagedActivityResultLauncher<String, Uri?>, 
     gifMediaPickerLauncher: ManagedActivityResultLauncher<String, Uri?>, 
     videoMediaPickerLauncher: ManagedActivityResultLauncher<String, Uri?> 
@@ -699,23 +731,36 @@ fun AddWidgetDialog(
         onDismissRequest = onDismissRequest,
         title = { Text("Добавить виджет") },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) { // Make dialog scrollable
                 WidgetType.entries.forEach { widgetType ->
                     AddWidgetRow(widgetType, widgetType.displayName) {
                         when (widgetType) {
-                            WidgetType.TEXT -> onShowTextDialog()
-                            WidgetType.AD -> adMediaPickerLauncher.launch("image/*") 
-                            WidgetType.GIF -> gifMediaPickerLauncher.launch("image/gif")
-                            WidgetType.VIDEO -> videoMediaPickerLauncher.launch("video/*")
-                            WidgetType.ONVIF_CAMERA -> {
-                                onAddWidget(WidgetType.ONVIF_CAMERA, null)
+                            WidgetType.TEXT -> {
+                                onShowTextDialog() // Show separate dialog for text input
+                                // onDismissRequest() // Keep dialog open if text dialog is a sub-flow, or dismiss if it's separate
                             }
-                            else -> onAddWidget(widgetType, null) 
+                            WidgetType.AD -> {
+                                adMediaPickerLauncher.launch("image/*")
+                                onDismissRequest() // Dismiss after launching picker
+                            }
+                            WidgetType.GIF -> {
+                                gifMediaPickerLauncher.launch("image/gif")
+                                onDismissRequest()
+                            }
+                            WidgetType.VIDEO -> {
+                                videoMediaPickerLauncher.launch("video/*")
+                                onDismissRequest()
+                            }
+                            WidgetType.ONVIF_CAMERA -> {
+                                onAddWidget(WidgetType.ONVIF_CAMERA, null) // Triggers camera discovery
+                                onDismissRequest()
+                            }
+                            else -> { // For Clock, Weather, etc.
+                                onAddWidget(widgetType, null)
+                                onDismissRequest()
+                            }
                         }
-                        if (widgetType != WidgetType.TEXT && widgetType != WidgetType.AD && 
-                            widgetType != WidgetType.GIF && widgetType != WidgetType.VIDEO && widgetType != WidgetType.ONVIF_CAMERA) {
-                            onDismissRequest()
-                        }
+                        // Removed the complex dismiss logic, handled per case now
                     }
                     Spacer(Modifier.height(8.dp))
                 }
@@ -723,9 +768,10 @@ fun AddWidgetDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismissRequest) {
-                Text("Отмена")
+                Text("Отмена") // General cancel for the dialog itself
             }
-        }
+        },
+        dismissButton = null // No separate dismiss button, actions handle dismissal or Cancel button does
     )
 }
 

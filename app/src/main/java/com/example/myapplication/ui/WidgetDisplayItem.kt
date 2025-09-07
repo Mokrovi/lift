@@ -104,7 +104,7 @@ fun WidgetDisplayItem(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showClockStyleDialog by remember(widgetData.id) { mutableStateOf(false) }
     var showWeatherSettingsDialog by remember(widgetData.id) { mutableStateOf(false) }
-    var showEditPropertiesDialog by remember(widgetData.id) { mutableStateOf(false) } 
+    var showEditPropertiesDialog by remember(widgetData.id) { mutableStateOf(false) }
     var showMediaActionDialog by remember(widgetData.id) { mutableStateOf(false) }
 
     if (showDeleteDialog) {
@@ -123,7 +123,7 @@ fun WidgetDisplayItem(
             }
         )
     }
-    
+
     if (showMediaActionDialog) {
         AlertDialog(
             onDismissRequest = { showMediaActionDialog = false },
@@ -157,15 +157,15 @@ fun WidgetDisplayItem(
 
     Box(
         modifier = Modifier
-            .offset { currentPosition } 
+            .offset { currentPosition }
             .size(currentWidth, currentHeight)
             .clip(RoundedCornerShape(widgetData.cornerRadius.dp))
-            .pointerInput(isEditMode, widgetData) { 
+            .pointerInput(isEditMode, widgetData) {
                 if (isEditMode) {
                     detectDragGestures(
                         onDragStart = { dragStartOffset = Offset(currentPosition.x.toFloat(), currentPosition.y.toFloat()) },
                         onDragEnd = {
-                            isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), currentWidth.value, currentHeight.value, false) 
+                            isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), currentWidth.value, currentHeight.value, false)
                             if (isColliding) {
                                 currentPosition = IntOffset(dragStartOffset.x.roundToInt(), dragStartOffset.y.roundToInt())
                             } else {
@@ -178,7 +178,7 @@ fun WidgetDisplayItem(
                             val newX = currentPosition.x + dragAmount.x
                             val newY = currentPosition.y + dragAmount.y
                             currentPosition = IntOffset(newX.roundToInt(), newY.roundToInt())
-                            isColliding = checkCollision(widgetData, newX, newY, currentWidth.value, currentHeight.value, false) 
+                            isColliding = checkCollision(widgetData, newX, newY, currentWidth.value, currentHeight.value, false)
                         }
                     )
                 }
@@ -187,7 +187,7 @@ fun WidgetDisplayItem(
         Card(
             modifier = Modifier
                 .fillMaxSize()
-                .combinedClickable( 
+                .combinedClickable(
                     onClick = { /* No action on single click on the card itself */ },
                     onLongClick = {
                         if (isEditMode) {
@@ -197,19 +197,19 @@ fun WidgetDisplayItem(
                                 }
                                 WidgetType.CLOCK -> showClockStyleDialog = true
                                 WidgetType.WEATHER -> showWeatherSettingsDialog = true
-                                WidgetType.TEXT -> showClockStyleDialog = true 
-                                else -> showEditPropertiesDialog = true 
+                                WidgetType.TEXT -> showClockStyleDialog = true
+                                else -> showEditPropertiesDialog = true
                             }
                         }
                     },
-                    onDoubleClick = { 
+                    onDoubleClick = {
                         onWidgetDoubleClick()
                     }
                 ),
             shape = RoundedCornerShape(widgetData.cornerRadius.dp),
             colors = CardDefaults.cardColors(
                 containerColor = widgetData.backgroundColor?.let { Color(it) }
-                    ?: if ((widgetData.type == WidgetType.GIF || widgetData.type == WidgetType.VIDEO) && widgetData.mediaUri == null) Color.Gray 
+                    ?: if ((widgetData.type == WidgetType.GIF || widgetData.type == WidgetType.VIDEO) && widgetData.mediaUri == null) Color.Gray
                     else MaterialTheme.colorScheme.surfaceVariant
             ),
             border = if (isColliding) {
@@ -225,11 +225,11 @@ fun WidgetDisplayItem(
                 when (widgetData.type) {
                     WidgetType.WEATHER -> WeatherWidgetCard(
                         widget = widgetData,
-                        onWeatherSettingsClick = { /* Kept for potential future use, primary is long press */ }, 
+                        onWeatherSettingsClick = { /* Kept for potential future use, primary is long press */ },
                         textColor = widgetData.textColor?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface,
                         backgroundColor = widgetData.backgroundColor?.let { Color(it) } ?: Color.Transparent,
                         isEditMode = isEditMode,
-                        onLongPress = { 
+                        onLongPress = {
                             if (isEditMode) {
                                 showWeatherSettingsDialog = true
                             }
@@ -264,7 +264,7 @@ fun WidgetDisplayItem(
                         }
                     }
                     WidgetType.AD -> {
-                        key(widgetData.mediaUri) { 
+                        key(widgetData.mediaUri) {
                             widgetData.mediaUri?.let { uri ->
                                 val context = LocalContext.current
                                 val imageWidthPx = with(density) { currentWidth.roundToPx() }
@@ -273,15 +273,15 @@ fun WidgetDisplayItem(
                                 val painter = rememberAsyncImagePainter(
                                     model = ImageRequest.Builder(context)
                                         .data(uri)
-                                        .size(imageWidthPx, imageHeightPx) 
-                                        .precision(Precision.EXACT) 
+                                        .size(imageWidthPx, imageHeightPx)
+                                        .precision(Precision.EXACT)
                                         .build()
                                 )
                                 Image(
                                     painter = painter,
                                     contentDescription = "Advertisement background",
                                     modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp)),
-                                    contentScale = ContentScale.Fit 
+                                    contentScale = ContentScale.Fit
                                 )
                             } ?: Text("Advertisement Area", style = MaterialTheme.typography.bodyLarge)
                         }
@@ -289,12 +289,12 @@ fun WidgetDisplayItem(
                     WidgetType.TEXT -> {
                         EditableTextWidget(
                             widgetData = widgetData,
-                            onWidgetDataChange = onUpdate, 
+                            onWidgetDataChange = onUpdate,
                             modifier = Modifier.fillMaxSize()
                         )
                     }
                     WidgetType.GIF -> {
-                        key(widgetData.mediaUri) { 
+                        key(widgetData.mediaUri) {
                             widgetData.mediaUri?.let {
                                 GifImage(
                                     data = it,
@@ -305,7 +305,7 @@ fun WidgetDisplayItem(
                         }
                     }
                     WidgetType.VIDEO -> {
-                        key(widgetData.mediaUri) { 
+                        key(widgetData.mediaUri) {
                             widgetData.mediaUri?.let {
                                 VideoPlayer(
                                     videoUri = it,
@@ -324,21 +324,21 @@ fun WidgetDisplayItem(
                         Icon(Icons.Filled.Delete, contentDescription = "Удалить")
                     }
 
-                    Box( 
+                    Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .size(40.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
-                            .pointerInput(isEditMode, widgetData) { 
+                            .pointerInput(isEditMode, widgetData) {
                                 if (isEditMode) {
                                     detectDragGestures(
                                         onDragStart = { resizeStartSize = Pair(currentWidth, currentHeight) },
                                         onDragEnd = {
                                             val finalWidth = kotlin.math.max(currentWidth.value, 48f)
                                             val finalHeight = kotlin.math.max(currentHeight.value, 48f)
-                                            isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), finalWidth, finalHeight, true) 
+                                            isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), finalWidth, finalHeight, true)
                                             if (isColliding) {
                                                 currentWidth = resizeStartSize.first
                                                 currentHeight = resizeStartSize.second
@@ -355,7 +355,7 @@ fun WidgetDisplayItem(
                                             currentHeight = androidx.compose.ui.unit.max(newHeightDp, 48.dp)
                                             val tempWidth = kotlin.math.max(currentWidth.value, 48f)
                                             val tempHeight = kotlin.math.max(currentHeight.value, 48f)
-                                            isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), tempWidth, tempHeight, true) 
+                                            isColliding = checkCollision(widgetData, currentPosition.x.toFloat(), currentPosition.y.toFloat(), tempWidth, tempHeight, true)
                                         }
                                     )
                                 }
@@ -375,21 +375,27 @@ fun WidgetDisplayItem(
         }
     }
 
-    if (showEditPropertiesDialog) { 
+    if (showEditPropertiesDialog) {
         WidgetPropertiesDialog(
             showDialog = showEditPropertiesDialog,
             widgetData = widgetData,
             colorPalette = colorPalette,
-            isTextColorRelevant = false, 
+            isTextColorRelevant = when (widgetData.type) { // Определяем релевантность цвета текста
+                WidgetType.TEXT, WidgetType.CLOCK, WidgetType.WEATHER -> true
+                else -> false
+            },
             onDismissRequest = { showEditPropertiesDialog = false },
-            onSave = { newWidth, newHeight, newBackgroundColor, newTextColor ->
+            onSave = { newX, newY, newWidth, newHeight, newBackgroundColor, newTextColor ->
                 val updatedWidget = widgetData.copy(
+                    x = newX,
+                    y = newY,
                     width = newWidth,
                     height = newHeight,
                     backgroundColor = newBackgroundColor,
-                    textColor = newTextColor 
+                    textColor = newTextColor
                 )
                 onUpdate(updatedWidget)
+                currentPosition = IntOffset(newX, newY)
                 currentWidth = newWidth.toFloat().toSafeDp(minSize = 48.dp)
                 currentHeight = newHeight.toFloat().toSafeDp(minSize = 48.dp)
                 showEditPropertiesDialog = false
@@ -403,8 +409,8 @@ fun WidgetDisplayItem(
             initialManualCity = widgetData.manualCityName,
             initialTextColorInt = widgetData.textColor,
             initialBackgroundColorInt = widgetData.backgroundColor,
-            initialWidth = widgetData.width, 
-            initialHeight = widgetData.height, 
+            initialWidth = widgetData.width,
+            initialHeight = widgetData.height,
             onDismissRequest = { showWeatherSettingsDialog = false },
             onSaveSettings = { newAutoLocate, newManualCity, newTextColorInt, newBackgroundColorInt, newWidth, newHeight ->
                 val cityOrModeChanged = (widgetData.autoLocate != newAutoLocate) ||
@@ -420,8 +426,8 @@ fun WidgetDisplayItem(
                     },
                     textColor = newTextColorInt,
                     backgroundColor = newBackgroundColorInt,
-                    width = newWidth, 
-                    height = newHeight, 
+                    width = newWidth,
+                    height = newHeight,
                     temperature = if (cityOrModeChanged) null else widgetData.temperature,
                     weatherDescription = if (cityOrModeChanged) null else widgetData.weatherDescription,
                     weatherIconUrl = if (cityOrModeChanged) null else widgetData.weatherIconUrl
@@ -434,16 +440,16 @@ fun WidgetDisplayItem(
         )
     }
 
-    if (showClockStyleDialog && (widgetData.type == WidgetType.CLOCK || widgetData.type == WidgetType.TEXT)) { 
+    if (showClockStyleDialog && (widgetData.type == WidgetType.CLOCK || widgetData.type == WidgetType.TEXT)) {
         TextEditDialog(
-            showDialog = showClockStyleDialog, 
+            showDialog = showClockStyleDialog,
             widgetData = widgetData,
-            initialWidth = widgetData.width, 
-            initialHeight = widgetData.height, 
+            initialWidth = widgetData.width,
+            initialHeight = widgetData.height,
             onDismissRequest = { showClockStyleDialog = false },
-            onSave = { newText, newBackgroundColor, newTextColor, newTextSize, newIsVertical, newHorizontalAlignment, newFontFamily, newLineHeightScale, newLetterSpacingSp, newFontWeight, newWidth, newHeight -> 
+            onSave = { newText, newBackgroundColor, newTextColor, newTextSize, newIsVertical, newHorizontalAlignment, newFontFamily, newLineHeightScale, newLetterSpacingSp, newFontWeight, newWidth, newHeight ->
                 val updatedWidget = widgetData.copy(
-                    textData = newText, 
+                    textData = newText,
                     backgroundColor = newBackgroundColor,
                     textColor = newTextColor,
                     textSize = newTextSize,
@@ -453,53 +459,83 @@ fun WidgetDisplayItem(
                     lineHeightScale = newLineHeightScale,
                     letterSpacingSp = newLetterSpacingSp,
                     fontWeight = newFontWeight,
-                    width = newWidth, 
-                    height = newHeight 
+                    width = newWidth,
+                    height = newHeight
                 )
                 onUpdate(updatedWidget)
                 currentWidth = newWidth.toFloat().toSafeDp(minSize = 48.dp)
                 currentHeight = newHeight.toFloat().toSafeDp(minSize = 48.dp)
                 showClockStyleDialog = false
             },
-            isTextContentEditable = widgetData.type == WidgetType.TEXT 
+            isTextContentEditable = widgetData.type == WidgetType.TEXT
         )
     }
 }
 
 @Composable
-fun WidgetPropertiesDialog( 
+fun WidgetPropertiesDialog(
     showDialog: Boolean,
     widgetData: WidgetData,
     colorPalette: List<Color>,
-    isTextColorRelevant: Boolean, 
+    isTextColorRelevant: Boolean,
     onDismissRequest: () -> Unit,
-    onSave: (newWidth: Int, newHeight: Int, newBackgroundColor: Int?, newTextColor: Int?) -> Unit
+    onSave: (newX: Int, newY: Int, newWidth: Int, newHeight: Int, newBackgroundColor: Int?, newTextColor: Int?) -> Unit
 ) {
     if (showDialog) {
+        var currentXInput by remember { mutableStateOf(widgetData.x.toString()) }
+        var currentYInput by remember { mutableStateOf(widgetData.y.toString()) }
         var currentWidthInput by remember { mutableStateOf(widgetData.width.toString()) }
         var currentHeightInput by remember { mutableStateOf(widgetData.height.toString()) }
         var selectedBackgroundColor by remember { mutableStateOf(widgetData.backgroundColor?.let { Color(it) }) }
-        var selectedTextColor by remember(widgetData.id, widgetData.textColor, isTextColorRelevant) { 
-            mutableStateOf(if(isTextColorRelevant) widgetData.textColor?.let { Color(it) } else null) 
+        var selectedTextColor by remember(widgetData.id, widgetData.textColor, isTextColorRelevant) {
+            mutableStateOf(if(isTextColorRelevant) widgetData.textColor?.let { Color(it) } else null)
         }
 
         AlertDialog(
             onDismissRequest = onDismissRequest,
             title = { Text("Edit Widget Properties") },
             text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) { 
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    TextField(
+                        value = currentXInput,
+                        onValueChange = { newValue ->
+                            currentXInput = newValue.filterIndexed { index, char ->
+                                char.isDigit() || (index == 0 && char == '-')
+                            }
+                        },
+                        label = { Text("Position X") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    TextField(
+                        value = currentYInput,
+                        onValueChange = { newValue ->
+                            currentYInput = newValue.filterIndexed { index, char ->
+                                char.isDigit() || (index == 0 && char == '-')
+                            }
+                        },
+                        label = { Text("Position Y") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     TextField(
                         value = currentWidthInput,
                         onValueChange = { currentWidthInput = it.filter { char -> char.isDigit() } },
                         label = { Text("Width (dp)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     TextField(
                         value = currentHeightInput,
                         onValueChange = { currentHeightInput = it.filter { char -> char.isDigit() } },
                         label = { Text("Height (dp)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("Background Color:")
@@ -521,11 +557,11 @@ fun WidgetPropertiesDialog(
                             )
                         }
                     }
-                    Button(onClick = { selectedBackgroundColor = null }) {
+                    Button(onClick = { selectedBackgroundColor = null }, modifier = Modifier.fillMaxWidth()) {
                         Text("Clear Background Color")
                     }
-                    
-                    if (isTextColorRelevant) { 
+
+                    if (isTextColorRelevant) {
                         Spacer(modifier = Modifier.height(16.dp))
                         Text("Text Color:")
                         Row(
@@ -546,7 +582,7 @@ fun WidgetPropertiesDialog(
                                 )
                             }
                         }
-                        Button(onClick = { selectedTextColor = null }) {
+                        Button(onClick = { selectedTextColor = null }, modifier = Modifier.fillMaxWidth()) {
                             Text("Clear Text Color")
                         }
                     }
@@ -554,14 +590,16 @@ fun WidgetPropertiesDialog(
             },
             confirmButton = {
                 Button(onClick = {
+                    val newX = currentXInput.toIntOrNull() ?: widgetData.x
+                    val newY = currentYInput.toIntOrNull() ?: widgetData.y
                     val newWidth = currentWidthInput.toIntOrNull() ?: widgetData.width
                     val newHeight = currentHeightInput.toIntOrNull() ?: widgetData.height
-                    val textColorToSave = if (isTextColorRelevant) { 
+                    val textColorToSave = if (isTextColorRelevant) {
                         selectedTextColor?.toArgb()
                     } else {
-                        widgetData.textColor 
+                        widgetData.textColor
                     }
-                    onSave(newWidth, newHeight, selectedBackgroundColor?.toArgb(), textColorToSave)
+                    onSave(newX, newY, newWidth, newHeight, selectedBackgroundColor?.toArgb(), textColorToSave)
                     onDismissRequest()
                 }) {
                     Text("Save")

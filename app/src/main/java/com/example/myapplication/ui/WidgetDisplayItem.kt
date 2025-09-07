@@ -226,7 +226,7 @@ fun WidgetDisplayItem(
                         } ?: Text("Нет сигнала", style = MaterialTheme.typography.bodyLarge)
                     }
                     WidgetType.ONVIF_CAMERA -> {
-                        val testMjpegUrl = "http://admin:admin@192.168.1.200/action/stream?subject=mjpeg"
+                        val testMjpegUrl = "rtsp://192.168.1.188:554/live/main"
                         val testCameraData = widgetData.copy(
                             mediaUri = Uri.parse(testMjpegUrl)
                         )

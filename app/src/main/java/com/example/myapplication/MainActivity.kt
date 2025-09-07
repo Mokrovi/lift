@@ -20,11 +20,14 @@ import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.border // Modifier.border
+import androidx.compose.foundation.BorderStroke // <<<< ADDED THIS IMPORT
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape // Added import
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -64,6 +67,33 @@ import java.io.OutputStream
 const val KEY_BACKGROUND_TYPE = "background_type"
 const val KEY_BACKGROUND_COLOR_ARGB = "background_color_argb"
 const val KEY_BACKGROUND_IMAGE_URI = "background_image_uri"
+
+// Вспомогательные функции для HEX <-> Color, добавленные сюда
+fun Color.toHexString(includeAlpha: Boolean = false): String {
+    val argb = this.toArgb()
+    return if (includeAlpha) {
+        String.format("#%08X", argb)
+    } else {
+        String.format("#%06X", (0xFFFFFF and argb))
+    }
+}
+
+fun parseHexColor(hexString: String): Color? {
+    return try {
+        val colorString = if (hexString.startsWith("#")) hexString.substring(1) else hexString
+        if (colorString.length != 6 && colorString.length != 8) return null // Basic validation for length
+
+        val colorLong = colorString.toLong(16)
+        when (colorString.length) {
+            6 -> Color(colorLong or 0xFF000000) // Add full alpha if only RGB is provided
+            8 -> Color(colorLong)
+            else -> null
+        }
+    } catch (e: NumberFormatException) {
+        null
+    }
+}
+
 class MainActivity : ComponentActivity() {
 
     private lateinit var widgetManager: WidgetManager
@@ -176,7 +206,10 @@ class MainActivity : ComponentActivity() {
                 var canvasBackgroundColor by remember { mutableStateOf(Color(sharedPreferences.getInt(KEY_BACKGROUND_COLOR_ARGB, Color.DarkGray.toArgb()))) }
                 var canvasImageBackgroundUriString by remember { mutableStateOf(sharedPreferences.getString(KEY_BACKGROUND_IMAGE_URI, null)) }
                 
-                var widgetBeingModified by remember { mutableStateOf<WidgetData?>(null) } // <-- НОВОЕ СОСТОЯНИЕ
+                var widgetBeingModified by remember { mutableStateOf<WidgetData?>(null) } 
+
+                var showBackgroundHexColorDialog by remember { mutableStateOf(false) }
+
 
                 val filePickerLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.StartActivityForResult()
@@ -198,7 +231,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 // --- Launchers for adding new media widgets ---
-                val adMediaPickerLauncher = createMediaPickerLauncher { _, originalUri -> // selectedUri not directly used here
+                val adMediaPickerLauncher = createMediaPickerLauncher { _, originalUri -> 
                      val copiedUri = copyFileFromUri(context, originalUri, "ad_media_${System.currentTimeMillis()}")
                     if (copiedUri != null) {
                         if (!widgetManager.addWidget(WidgetType.AD, mediaUri = copiedUri.toString())) {
@@ -280,10 +313,30 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                if (showBackgroundHexColorDialog) {
+                    ColorPickerDialog(
+                        initialColor = canvasBackgroundColor,
+                        onColorSelected = { newColor ->
+                            canvasBackgroundColor = newColor
+                            canvasImageBackgroundUriString = null
+                            backgroundType = "color"
+                            with(sharedPreferences.edit()) {
+                                putString(KEY_BACKGROUND_TYPE, "color")
+                                putInt(KEY_BACKGROUND_COLOR_ARGB, newColor.toArgb())
+                                remove(KEY_BACKGROUND_IMAGE_URI)
+                                apply()
+                            }
+                            showBackgroundHexColorDialog = false
+                        },
+                        onDismissRequest = { showBackgroundHexColorDialog = false }
+                    )
+                }
+
+
                 ModalNavigationDrawer(
                     drawerState = drawerState,
                     drawerContent = {
-                        ModalDrawerSheet {
+                        ModalDrawerSheet(modifier = Modifier.verticalScroll(rememberScrollState())) {
                             Text("Настройки приложения", fontSize = 20.sp, modifier = Modifier.padding(16.dp))
                             Divider()
                             Row(
@@ -337,6 +390,12 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 }
+                            }
+                            Button(
+                                onClick = { showBackgroundHexColorDialog = true },
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                            ){
+                                Text("Выбрать цвет фона (HEX)")
                             }
                             Divider(modifier = Modifier.padding(vertical = 8.dp))
                             Button(
@@ -445,14 +504,14 @@ class MainActivity : ComponentActivity() {
                                         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
                                     }
                                 },
-                                onChangeMediaRequest = { widgetData -> // <-- ПЕРЕДАЧА ЛЯМБДЫ
+                                onChangeMediaRequest = { widgetData -> 
                                     widgetBeingModified = widgetData
                                     when (widgetData.type) {
                                         WidgetType.AD -> changeAdMediaLauncher.launch("image/*")
                                         WidgetType.GIF -> changeGifMediaLauncher.launch("image/gif")
                                         WidgetType.VIDEO -> changeVideoMediaLauncher.launch("video/*")
                                         else -> {
-                                            widgetBeingModified = null // Should not happen
+                                            widgetBeingModified = null 
                                         }
                                     }
                                 }
@@ -466,7 +525,7 @@ class MainActivity : ComponentActivity() {
                                             WidgetType.TEXT -> widgetManager.addWidget(widgetType, textData = data as String)
                                             WidgetType.AD, WidgetType.GIF, WidgetType.VIDEO -> {
                                                 when (widgetType) {
-                                                    WidgetType.AD -> adMediaPickerLauncher.launch("image/*") // ИЗМЕНЕНО НА image/*
+                                                    WidgetType.AD -> adMediaPickerLauncher.launch("image/*") 
                                                     WidgetType.GIF -> gifMediaPickerLauncher.launch("image/gif")
                                                     WidgetType.VIDEO -> videoMediaPickerLauncher.launch("video/*")
                                                     else -> {}
@@ -567,6 +626,64 @@ fun ColorButton(color: Color, onClick: () -> Unit) {
 }
 
 @Composable
+fun ColorPickerDialog(
+    initialColor: Color,
+    onColorSelected: (Color) -> Unit,
+    onDismissRequest: () -> Unit
+) {
+    var colorHexInput by remember { mutableStateOf(initialColor.toHexString()) }
+    var parsedColor by remember { mutableStateOf(initialColor) }
+
+    LaunchedEffect(colorHexInput) {
+        parsedColor = parseHexColor(colorHexInput) ?: initialColor
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text("Выберите цвет HEX") },
+        text = {
+            Column {
+                TextField(
+                    value = colorHexInput,
+                    onValueChange = { colorHexInput = it },
+                    label = { Text("HEX код (#RRGGBB или #AARRGGBB)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = {
+                        Box(
+                            Modifier
+                                .size(24.dp)
+                                .background(
+                                    parsedColor,
+                                    CircleShape
+                                )
+                                .border(BorderStroke(1.dp, Color.Gray), CircleShape) // Error was here
+                        )
+                    }
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    parseHexColor(colorHexInput)?.let {
+                        onColorSelected(it)
+                    }
+                    onDismissRequest()
+                },
+                enabled = parseHexColor(colorHexInput) != null
+            ) {
+                Text("Применить")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onDismissRequest) {
+                Text("Отмена")
+            }
+        }
+    )
+}
+
+@Composable
 fun AddWidgetDialog(
     onDismissRequest: () -> Unit,
     onAddWidget: (WidgetType, Any?) -> Unit, 
@@ -587,7 +704,7 @@ fun AddWidgetDialog(
                     AddWidgetRow(widgetType, widgetType.displayName) {
                         when (widgetType) {
                             WidgetType.TEXT -> onShowTextDialog()
-                            WidgetType.AD -> adMediaPickerLauncher.launch("image/*") // ИЗМЕНЕНО НА image/*
+                            WidgetType.AD -> adMediaPickerLauncher.launch("image/*") 
                             WidgetType.GIF -> gifMediaPickerLauncher.launch("image/gif")
                             WidgetType.VIDEO -> videoMediaPickerLauncher.launch("video/*")
                             WidgetType.ONVIF_CAMERA -> {

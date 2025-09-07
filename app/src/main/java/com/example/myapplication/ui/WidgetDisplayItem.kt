@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -23,7 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.shadow
+// import androidx.compose.ui.draw.shadow // Не используется, можно удалить если нет других применений
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -31,12 +32,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Density
+// import androidx.compose.ui.unit.Density // Не используется, можно удалить если нет других применений
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.input.KeyboardType
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import coil.size.Precision
@@ -47,10 +49,35 @@ import com.example.myapplication.WidgetType
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.math.max
+import kotlin.math.max // Убедимся что импорт для max есть, если используется androidx.compose.ui.unit.max, то этот специфичный не нужен
 import kotlin.math.roundToInt
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
+
+// Вспомогательные функции для HEX <-> Color
+fun Color.toHexString(includeAlpha: Boolean = false): String {
+    val argb = this.toArgb()
+    return if (includeAlpha) {
+        String.format("#%08X", argb)
+    } else {
+        String.format("#%06X", (0xFFFFFF and argb))
+    }
+}
+
+fun parseHexColor(hexString: String): Color? {
+    return try {
+        val colorString = if (hexString.startsWith("#")) hexString.substring(1) else hexString
+        if (colorString.length != 6 && colorString.length != 8) return null // Basic validation for length
+
+        val colorLong = colorString.toLong(16)
+        when (colorString.length) {
+            6 -> Color(colorLong or 0xFF000000) // Add full alpha if only RGB is provided
+            8 -> Color(colorLong)
+            else -> null
+        }
+    } catch (e: NumberFormatException) {
+        null
+    }
+}
+
 
 fun Float.toSafeDp(minSize: Dp = 1.dp): Dp {
     return if (this.isNaN() || this <= 0f) {
@@ -84,7 +111,7 @@ fun WidgetDisplayItem(
     val density = LocalDensity.current
     var isColliding by remember { mutableStateOf(false) }
 
-    val normalBorderWidth = with(density) { 1f.toDp() }
+    // val normalBorderWidth = with(density) { 1f.toDp() } // Не используется, можно удалить
     val collidingBorderWidth = with(density) { 5f.toDp() }
 
     val colorPalette = remember {
@@ -486,10 +513,43 @@ fun WidgetPropertiesDialog(
         var currentYInput by remember { mutableStateOf(widgetData.y.toString()) }
         var currentWidthInput by remember { mutableStateOf(widgetData.width.toString()) }
         var currentHeightInput by remember { mutableStateOf(widgetData.height.toString()) }
+
         var selectedBackgroundColor by remember { mutableStateOf(widgetData.backgroundColor?.let { Color(it) }) }
+        var backgroundColorHexInput by remember { mutableStateOf(selectedBackgroundColor?.toHexString() ?: "") }
+
         var selectedTextColor by remember(widgetData.id, widgetData.textColor, isTextColorRelevant) {
-            mutableStateOf(if(isTextColorRelevant) widgetData.textColor?.let { Color(it) } else null)
+            mutableStateOf(if (isTextColorRelevant) widgetData.textColor?.let { Color(it) } else null)
         }
+        var textColorHexInput by remember { mutableStateOf(selectedTextColor?.toHexString() ?: "") }
+
+        // Синхронизация HEX <-> Palette для BackgroundColor
+        LaunchedEffect(selectedBackgroundColor) {
+            backgroundColorHexInput = selectedBackgroundColor?.toHexString() ?: ""
+        }
+        LaunchedEffect(backgroundColorHexInput) {
+            if (backgroundColorHexInput.startsWith("#") && (backgroundColorHexInput.length == 7 || backgroundColorHexInput.length == 9)) {
+                parseHexColor(backgroundColorHexInput)?.let {
+                    if (it != selectedBackgroundColor) selectedBackgroundColor = it
+                }
+            } else if (backgroundColorHexInput.isEmpty()) {
+                 selectedBackgroundColor = null
+            }
+        }
+
+        // Синхронизация HEX <-> Palette для TextColor
+        LaunchedEffect(selectedTextColor) {
+            textColorHexInput = selectedTextColor?.toHexString() ?: ""
+        }
+        LaunchedEffect(textColorHexInput) {
+            if (textColorHexInput.startsWith("#") && (textColorHexInput.length == 7 || textColorHexInput.length == 9)) {
+                parseHexColor(textColorHexInput)?.let {
+                    if (it != selectedTextColor) selectedTextColor = it
+                }
+            } else if (textColorHexInput.isEmpty()) {
+                selectedTextColor = null
+            }
+        }
+
 
         AlertDialog(
             onDismissRequest = onDismissRequest,
@@ -557,7 +617,24 @@ fun WidgetPropertiesDialog(
                             )
                         }
                     }
-                    Button(onClick = { selectedBackgroundColor = null }, modifier = Modifier.fillMaxWidth()) {
+                    TextField(
+                        value = backgroundColorHexInput,
+                        onValueChange = { backgroundColorHexInput = it },
+                        label = { Text("Background Color HEX (#RRGGBB or #AARRGGBB)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        leadingIcon = {
+                            Box(
+                                Modifier
+                                    .size(20.dp)
+                                    .background(
+                                        parseHexColor(backgroundColorHexInput) ?: Color.Transparent,
+                                        CircleShape
+                                    )
+                                    .border(BorderStroke(1.dp, Color.Gray), CircleShape)
+                            )
+                        }
+                    )
+                    Button(onClick = { selectedBackgroundColor = null; backgroundColorHexInput = "" }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
                         Text("Clear Background Color")
                     }
 
@@ -582,7 +659,25 @@ fun WidgetPropertiesDialog(
                                 )
                             }
                         }
-                        Button(onClick = { selectedTextColor = null }, modifier = Modifier.fillMaxWidth()) {
+                        TextField(
+                            value = textColorHexInput,
+                            onValueChange = { textColorHexInput = it },
+                            label = { Text("Text Color HEX (#RRGGBB or #AARRGGBB)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            leadingIcon = {
+                                Box(
+                                    Modifier
+                                        .size(20.dp)
+                                        .background(
+                                            parseHexColor(textColorHexInput)
+                                                ?: Color.Transparent, // Fallback if parsing fails
+                                            CircleShape
+                                        )
+                                        .border(BorderStroke(1.dp, Color.Gray), CircleShape)
+                                )
+                            }
+                        )
+                        Button(onClick = { selectedTextColor = null; textColorHexInput = "" }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
                             Text("Clear Text Color")
                         }
                     }
@@ -594,12 +689,11 @@ fun WidgetPropertiesDialog(
                     val newY = currentYInput.toIntOrNull() ?: widgetData.y
                     val newWidth = currentWidthInput.toIntOrNull() ?: widgetData.width
                     val newHeight = currentHeightInput.toIntOrNull() ?: widgetData.height
-                    val textColorToSave = if (isTextColorRelevant) {
-                        selectedTextColor?.toArgb()
-                    } else {
-                        widgetData.textColor
-                    }
-                    onSave(newX, newY, newWidth, newHeight, selectedBackgroundColor?.toArgb(), textColorToSave)
+
+                    val finalBackgroundColor = parseHexColor(backgroundColorHexInput) ?: selectedBackgroundColor
+                    val finalTextColor = if (isTextColorRelevant) parseHexColor(textColorHexInput) ?: selectedTextColor else null
+
+                    onSave(newX, newY, newWidth, newHeight, finalBackgroundColor?.toArgb(), finalTextColor?.toArgb())
                     onDismissRequest()
                 }) {
                     Text("Save")

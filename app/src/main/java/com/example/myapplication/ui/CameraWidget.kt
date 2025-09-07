@@ -74,21 +74,26 @@ fun CameraStreamView(
             mediaPlayer.stop()
             mediaPlayer.release()
             libVlc.release()
+            Log.d("CameraStreamView", "Disposed and released VLC resources for ${cameraDevice.streamUrl}")
         }
     }
 
-    LaunchedEffect(cameraDevice) {
-        try {
-            if (cameraDevice.streamUrl.isNotEmpty()) {
+    LaunchedEffect(cameraDevice, showError) { // Added showError to re-evaluate if streamUrl becomes valid
+        if (cameraDevice.streamUrl.isNotEmpty()) {
+            try {
                 val media = Media(libVlc, Uri.parse(cameraDevice.streamUrl))
                 mediaPlayer.media = media
-            } else {
-                showError = "Camera stream URL is empty"
-                Log.e("CameraStream", "Camera stream URL is empty for device: ${cameraDevice.ipAddress}")
+                // mediaPlayer.play() // Play is handled in AndroidView's factory/update
+                showError = null // Clear previous error if any
+            } catch (e: Exception) {
+                showError = "Failed to play stream: ${e.message}"
+                Log.e("CameraStream", "Error playing stream ${cameraDevice.streamUrl}", e)
             }
-        } catch (e: Exception) {
-            showError = "Failed to play stream: ${e.message}"
-            Log.e("CameraStream", "Error playing stream ${cameraDevice.streamUrl}", e)
+        } else {
+            // showError = "Camera stream URL is empty" // This can be too aggressive if cameraDevice is briefly null
+            // Log.e("CameraStream", "Camera stream URL is empty for device: ${cameraDevice.ipAddress}")
+            if (mediaPlayer.isPlaying) mediaPlayer.stop() // Stop if it was playing something else
+            mediaPlayer.media = null
         }
     }
 
@@ -107,24 +112,27 @@ fun CameraStreamView(
                     mediaPlayer.attachViews(this, null, false, false)
                     if (mediaPlayer.media != null && !mediaPlayer.isPlaying) {
                         mediaPlayer.play()
+                        Log.d("CameraStreamView", "Factory: Playing ${cameraDevice.streamUrl}")
                     }
                 }
             },
             update = { vlcVideoLayout ->
-                if (mediaPlayer.media == null && cameraDevice.streamUrl.isNotEmpty()) {
-                    try {
+                if (!mediaPlayer.vlcVout.areViewsAttached()) {
+                     mediaPlayer.attachViews(vlcVideoLayout, null, false, false)
+                }
+                if (mediaPlayer.media != null && !mediaPlayer.isPlaying && showError == null) {
+                     mediaPlayer.play()
+                     Log.d("CameraStreamView", "Update: Playing ${cameraDevice.streamUrl}")
+                } else if (mediaPlayer.media == null && cameraDevice.streamUrl.isNotEmpty()) {
+                     try {
                         val media = Media(libVlc, Uri.parse(cameraDevice.streamUrl))
                         mediaPlayer.media = media
+                        mediaPlayer.play()
+                        Log.d("CameraStreamView", "Update: Setting media and playing ${cameraDevice.streamUrl}")
                     } catch (e: Exception) {
                         showError = "Failed to set media: ${e.message}"
                         Log.e("CameraStream", "Error setting media in update for ${cameraDevice.streamUrl}", e)
                     }
-                }
-                if (mediaPlayer.media != null && !mediaPlayer.isPlaying && showError == null) {
-                     mediaPlayer.play()
-                }
-                if (!mediaPlayer.vlcVout.areViewsAttached()) {
-                    mediaPlayer.attachViews(vlcVideoLayout, null, false, false)
                 }
             },
             modifier = modifier.fillMaxSize()
@@ -138,10 +146,8 @@ suspend fun discoverTrD3121Camera(context: Context): CameraDevice? {
         val staticIp = "192.168.1.188"
         Log.d("CameraDiscovery", "Attempting to connect to static IP: $staticIp")
 
-        // Define a list of stream URLs to try for the static IP
-        // Prioritize common paths without credentials first, then with if necessary
         val rtspStreamUrls = listOf(
-            "rtsp://admin:admin@$staticIp:554/live/main", // With common credentials
+            "rtsp://admin:admin@$staticIp:554/live/main", 
             "rtsp://admin:admin@$staticIp:554/live/sub",
             "rtsp://$staticIp:554/live/main",
             "rtsp://$staticIp:554/live/sub",
@@ -165,7 +171,6 @@ suspend fun discoverTrD3121Camera(context: Context): CameraDevice? {
             }
         }
 
-        // Try M-JPEG stream as a fallback if RTSP fails
         val mjpegUrl = "http://admin:admin@$staticIp/action/stream?subject=mjpeg"
         Log.d("CameraDiscovery", "Trying M-JPEG stream URL: $mjpegUrl")
         if (isStreamReachable(mjpegUrl)) {
@@ -178,31 +183,22 @@ suspend fun discoverTrD3121Camera(context: Context): CameraDevice? {
         }
         
         Log.d("CameraDiscovery", "Failed to connect to any stream for static IP: $staticIp")
-        null // Camera not found or stream not reachable
+        null 
     }
 }
 
-// discoverCameraWithOnvif, getLocalSubnet, and isCameraReachable functions
-// are no longer needed for static IP configuration but kept for potential future use
-// or if other parts of the app might still use them.
-// If they are truly unused, they can be removed.
-
 private fun discoverCameraWithOnvif(): String? {
-    // This function is not used when connecting to a static IP.
     Log.d("CameraDiscovery", "ONVIF discovery skipped (Static IP configured).")
     return null
 }
 
 private fun getLocalSubnet(context: Context): String? {
-    // This function is not used when connecting to a static IP.
     Log.d("CameraDiscovery", "Subnet discovery skipped (Static IP configured).")
     return null
 }
 
 
 private fun isCameraReachable(ipAddress: String, timeoutMs: Int = 1000): Boolean {
-    // This function can still be useful for a direct reachability test if needed,
-    // but discoverTrD3121Camera now relies on isStreamReachable.
     val portsToTest = listOf(80, 554, 8000, 8080)
     for (port in portsToTest) {
         try {
@@ -219,9 +215,6 @@ private fun isCameraReachable(ipAddress: String, timeoutMs: Int = 1000): Boolean
     return false
 }
 
-/**
- * Check if a stream (RTSP or HTTP) is reachable by attempting to connect to its host and port.
- */
 private fun isStreamReachable(streamUrl: String, timeoutMs: Int = 3000): Boolean {
     return try {
         val uri = Uri.parse(streamUrl)
@@ -263,39 +256,40 @@ fun DiscoveredCameraWidgetView(
     onCameraFound: ((CameraDevice) -> Unit)? = null
 ) {
     val context = LocalContext.current
-    var cameraDevice by remember { mutableStateOf<CameraDevice?>(null) }
-    var discoveryState by remember { mutableStateOf("Initializing...") }
-    var discoveryError by remember { mutableStateOf<String?>(null) }
+    var cameraDeviceState by remember { mutableStateOf<CameraDevice?>(null) } // Renamed to avoid conflict with outer scope if any
+    var discoveryStateText by remember { mutableStateOf("Initializing...") } // Renamed for clarity
+    var discoveryErrorText by remember { mutableStateOf<String?>(null) } // Renamed for clarity
 
     LaunchedEffect(Unit) {
-        discoveryState = "Attempting to connect to camera at 192.168.1.200..."
+        discoveryStateText = "Attempting to connect to camera at 192.168.1.188..." // Updated IP
         try {
             val foundCamera = discoverTrD3121Camera(context)
             if (foundCamera != null) {
-                cameraDevice = foundCamera
-                discoveryState = "Camera connected: ${foundCamera.name} at ${foundCamera.ipAddress}"
+                // cameraDeviceState = foundCamera // Keep it to display temporarily before hiding
+                discoveryStateText = "Camera connected: ${foundCamera.name} at ${foundCamera.ipAddress}"
                 onCameraFound?.invoke(foundCamera)
+                cameraDeviceState = null // Hide CameraStreamView after invoking callback
             } else {
-                discoveryState = "Connection failed"
-                discoveryError = "Could not connect to TR-D3121IR2 camera at 192.168.1.200. Please check IP, network, and camera power. Also verify stream paths."
+                discoveryStateText = "Connection failed"
+                discoveryErrorText = "Could not connect to TR-D3121IR2 camera at 192.168.1.188. Please check IP, network, and camera power. Also verify stream paths." // Updated IP
             }
         } catch (e: Exception) {
-            discoveryState = "Connection error"
-            discoveryError = "Error connecting to camera: ${e.message}"
+            discoveryStateText = "Connection error"
+            discoveryErrorText = "Error connecting to camera: ${e.message}"
             Log.e("DiscoveredCameraWidgetView", "Error in connection LaunchedEffect", e)
         }
     }
 
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        if (cameraDevice != null) {
-            CameraStreamView(cameraDevice = cameraDevice!!, modifier = Modifier.fillMaxSize())
+        if (cameraDeviceState != null) { // Check against the local state
+            CameraStreamView(cameraDevice = cameraDeviceState!!, modifier = Modifier.fillMaxSize())
         } else {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (discoveryState.contains("Attempting")) {
+                if (discoveryStateText.contains("Attempting")) {
                     CircularProgressIndicator()
                 }
-                Text(text = discoveryState, modifier = Modifier.padding(top = 8.dp), color = Color.Gray)
-                discoveryError?.let { error ->
+                Text(text = discoveryStateText, modifier = Modifier.padding(top = 8.dp), color = Color.Gray)
+                discoveryErrorText?.let { error ->
                     Text(text = error, modifier = Modifier.padding(top = 8.dp, start = 16.dp, end = 16.dp), color = Color.Red)
                 }
             }

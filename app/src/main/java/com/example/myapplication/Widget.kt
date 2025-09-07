@@ -5,7 +5,6 @@ import android.net.Uri
 enum class WidgetType(val displayName: String) {
     WEATHER("Виджет Погоды"),
     CLOCK("Виджет Часов"),
-    CAMERA("Виджет Камеры"),
     AD("Рекламный виджет"),
     TEXT("Текстовый виджет"),
     GIF("GIF виджет"),

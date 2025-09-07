@@ -198,8 +198,6 @@ fun WidgetDisplayItem(
                                 WidgetType.CLOCK -> showClockStyleDialog = true
                                 WidgetType.WEATHER -> showWeatherSettingsDialog = true
                                 WidgetType.TEXT -> showClockStyleDialog = true 
-                                // For ONVIF_CAMERA and CAMERA, long press will open showEditPropertiesDialog by default
-                                // if not handled by showMediaActionDialog (which it isn't currently for these types)
                                 else -> showEditPropertiesDialog = true 
                             }
                         }
@@ -211,7 +209,7 @@ fun WidgetDisplayItem(
             shape = RoundedCornerShape(widgetData.cornerRadius.dp),
             colors = CardDefaults.cardColors(
                 containerColor = widgetData.backgroundColor?.let { Color(it) }
-                    ?: if ((widgetData.type == WidgetType.CAMERA || widgetData.type == WidgetType.GIF || widgetData.type == WidgetType.VIDEO || widgetData.type == WidgetType.ONVIF_CAMERA) && widgetData.mediaUri == null && widgetData.type != WidgetType.ONVIF_CAMERA) Color.Gray // Adjusted condition for ONVIF
+                    ?: if ((widgetData.type == WidgetType.GIF || widgetData.type == WidgetType.VIDEO) && widgetData.mediaUri == null) Color.Gray 
                     else MaterialTheme.colorScheme.surfaceVariant
             ),
             border = if (isColliding) {
@@ -253,20 +251,8 @@ fun WidgetDisplayItem(
                             defaultFontSizeIfNotSet = (currentHeight.value / 3).sp
                         )
                     }
-                    WidgetType.CAMERA -> {
-                        key(widgetData.mediaUri) { 
-                            widgetData.mediaUri?.let {
-                                Image(
-                                    painter = rememberAsyncImagePainter(model = it),
-                                    contentDescription = "Camera feed",
-                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(widgetData.cornerRadius.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } ?: Text("Нет сигнала", style = MaterialTheme.typography.bodyLarge)
-                        }
-                    }
                     WidgetType.ONVIF_CAMERA -> {
-                        val fixedUrl = "rtsp://192.168.1.188:554/live/main"
+                        val fixedUrl = "rtsp://192.168.1.188:554/live/sub"
                         key(fixedUrl) { // Key with the fixed URL to ensure recomposition if needed
                             val cameraDataForDisplay = widgetData.copy(
                                 mediaUri = Uri.parse(fixedUrl)

@@ -10,10 +10,11 @@ import android.util.Log
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException // Added import
-import androidx.media3.common.Player // Added import
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import kotlinx.coroutines.*
 
 class RemoteCameraViewActivity : AppCompatActivity() {
 
@@ -21,13 +22,75 @@ class RemoteCameraViewActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private lateinit var playerView: PlayerView
     private lateinit var statusTextView: TextView
+    private var streamStatusJob: Job? = null
 
     private val closeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_CLOSE_REMOTE_CAMERA_VIEW) {
                 Log.d(TAG, "Received close broadcast. Finishing Activity.")
-                finish()
+                finishWithCleanup()
             }
+        }
+    }
+
+
+    private fun finishWithCleanup() {
+        NetworkSignalService.isRemoteCameraActivityRunning = false
+        streamStatusJob?.cancel()
+        releasePlayer()
+        finish()
+    }
+
+
+    private fun startStreamStatusChecker() {
+        streamStatusJob = CoroutineScope(Dispatchers.IO).launch {
+            while (isActive) {
+                delay(5000) // Проверяем каждые 5 секунд
+
+                if (!isStreamActiveOnPC()) {
+                    Log.d(TAG, "RTSP поток прекратился на ПК, возвращаемся")
+                    withContext(Dispatchers.Main) {
+                        statusTextView.text = "Стрим остановлен. Возврат..."
+                        finishWithCleanup()
+                    }
+                    break
+                }
+            }
+        }
+    }
+
+
+    private fun isStreamActiveOnPC(): Boolean {
+        return try {
+            val remoteIpAddress = intent.getStringExtra("REMOTE_IP_ADDRESS") ?: return false
+            val statusUrl = "http://$remoteIpAddress:8080/status"
+
+            val client = okhttp3.OkHttpClient.Builder()
+                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+
+            val request = okhttp3.Request.Builder()
+                .url(statusUrl)
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
+
+            if (response.isSuccessful && responseBody != null) {
+                val jsonObject = org.json.JSONObject(responseBody)
+                val isStreaming = jsonObject.optBoolean("streaming", false)
+                val isRtspActive = jsonObject.optBoolean("rtsp_stream_active", false)
+
+                Log.d(TAG, "PC status - streaming: $isStreaming, rtsp_active: $isRtspActive")
+                isStreaming && isRtspActive
+            } else {
+                Log.d(TAG, "Failed to get PC status: ${response.code}")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Ошибка при проверке статуса ПК: ${e.message}")
+            false
         }
     }
 
@@ -45,13 +108,17 @@ class RemoteCameraViewActivity : AppCompatActivity() {
 
         if (remoteIpAddress != null) {
             Log.d(TAG, "Received IP Address: $remoteIpAddress")
-            // MODIFIED PORT HERE
             val streamUrlForStatus = "rtsp://$remoteIpAddress:8554/live/stream"
-            statusTextView.text = "Attempting to stream from: $streamUrlForStatus"
+            statusTextView.text = "Подключение к: $remoteIpAddress"
+
+            // ← ДОБАВЬТЕ ЭТИ ДВЕ СТРОКИ
+            initializePlayer()
+            startStreamStatusChecker() // Запускаем проверку статуса
+
         } else {
             Log.e(TAG, "No IP Address received in Intent. Finishing activity.")
-            statusTextView.text = "Error: No IP Address received. Closing."
-            statusTextView.postDelayed({ finish() }, 3000)
+            statusTextView.text = "Ошибка: IP адрес не получен"
+            finishWithCleanup()
         }
 
         val intentFilter = IntentFilter(ACTION_CLOSE_REMOTE_CAMERA_VIEW)
@@ -161,7 +228,7 @@ class RemoteCameraViewActivity : AppCompatActivity() {
             if (player == null && intent.getStringExtra("REMOTE_IP_ADDRESS") != null) {
                 initializePlayer()
             }
-            playerView.onResume() 
+            playerView.onResume()
         }
     }
 
@@ -173,12 +240,12 @@ class RemoteCameraViewActivity : AppCompatActivity() {
             }
         }
         playerView.onResume()
-        player?.playWhenReady = true 
+        player?.playWhenReady = true
     }
 
     override fun onPause() {
         super.onPause()
-        player?.playWhenReady = false 
+        player?.playWhenReady = false
         playerView.onPause()
         if (Build.VERSION.SDK_INT <= 23) {
             releasePlayer()
